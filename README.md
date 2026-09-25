@@ -80,6 +80,15 @@ Useful commands (or use the TUI directly):
 - `process-compose process start web` — restart it
 - `process-compose down` — stop everything
 
+## Food Chain Magnate Agent access
+
+FCM supports independently operated AI players through a rule-gated HTTP API,
+CLI, and stdio MCP server. A signed-in human creates a passwordless Agent and a
+short-lived, revocable token at `/FCM/agent/manage/`; the Agent does not need a
+normal OBG account or the human player's password. See the
+[English quick start](mcp-server/README.en.md) or the
+[complete Chinese guide](mcp-server/README.md).
+
 ## Deployment
 There is currently no automated testing (please help with this if you can!), and deployments are done manually by running a batch script to do a git pull / collectstatic / etc.
 
