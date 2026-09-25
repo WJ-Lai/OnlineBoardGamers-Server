@@ -18,6 +18,9 @@ services:
     working_dir: /app
     volumes:
       - .:/app
+      # Keep image-installed Agent engine dependencies when the source tree is bind-mounted.
+      - fcm_vue_node_modules:/app/FCM/vueFCM/node_modules
+      - fcm_agent_node_modules:/app/mcp-server/node_modules
     ports:
       - "8000:8000"
     links:
@@ -45,3 +48,5 @@ services:
 
 volumes:
   data:
+  fcm_vue_node_modules:
+  fcm_agent_node_modules:

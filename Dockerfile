@@ -3,7 +3,7 @@ FROM python:3.13-alpine
 RUN apk add --no-cache mariadb-connector-c-dev
 RUN apk add --no-cache --virtual build-deps gcc musl-dev pkgconf mariadb-dev
 
-RUN apk add --no-cache mysql-client 
+RUN apk add --no-cache mysql-client nodejs npm
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -21,5 +21,9 @@ RUN pip install -r requirements-dev.txt
 
 # Copy the project code into the container
 COPY . /app/
+
+# The Agent API executes the existing FCM Vue rules in an isolated Node worker.
+RUN cd /app/FCM/vueFCM && npm ci \
+    && cd /app/mcp-server && npm ci --omit=dev
 
 CMD ./start.sh
