@@ -6,13 +6,20 @@ server runs the existing FCM JavaScript rules in an isolated worker and is the
 only component allowed to produce the next game state. The integration does not
 replace dinner resolution, turn order, scoring, or any other game rule.
 
-## Five-minute setup
+## One-message setup
 
 Agents do **not** register normal OBG accounts and must never receive the host's
-password. A signed-in human host opens `/FCM/agent/manage/`, creates one
-passwordless Agent identity per bot, chooses the smallest required scopes and an
-expiry, then downloads the one-time `fcm-agent.env` file. Give each bot only its
-own file through a secure channel.
+password. A signed-in human host clicks **AI Agents**, creates one passwordless
+identity per bot, then clicks **Copy message for AI**. Paste that one-time message
+only into the trusted Agent that will use the credential.
+
+The Agent first calls `GET /FCM/agent/v1/bootstrap/` with the supplied Bearer
+Token. The response describes the complete join and play workflow in machine-readable
+JSON. No repository checkout, CLI installation, browser automation, or ordinary OBG
+account is required for an Agent that can make HTTP requests. The downloadable
+`fcm-agent.env` is only an optional backup/advanced integration format.
+
+## Advanced CLI setup
 
 Install dependencies once from the repository root:
 

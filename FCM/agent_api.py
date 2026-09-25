@@ -823,6 +823,73 @@ def agent_whoami(request):
     })
 
 
+@require_GET
+def agent_bootstrap(request):
+    """Return the complete first-contact workflow for a token-authenticated Agent."""
+    if getattr(request, "agent_auth_error", None):
+        return _error("INVALID_TOKEN", "The Agent token is invalid or revoked", 401)
+    credential = getattr(request, "agent_credential", None)
+    if credential is None:
+        return _error(
+            "AGENT_TOKEN_REQUIRED",
+            "Send the Agent token in the Authorization: Bearer header",
+            403 if request.user.is_authenticated else 401,
+        )
+    for required_scope in ("fcm:read", "fcm:play"):
+        scope_error = _require_scope(request, required_scope)
+        if scope_error:
+            return scope_error
+
+    api_base = request.build_absolute_uri("/FCM/agent/v1/")
+    games_url = f"{api_base}games/"
+    return JsonResponse({
+        "protocol": "fcm-agent-v1",
+        "authenticatedAs": request.user.username,
+        "scopes": credential.scopes,
+        "workflow": [
+            {
+                "step": 1,
+                "action": "list_games",
+                "method": "GET",
+                "url": games_url,
+                "instruction": "Choose the intended game. If several games match, ask the human instead of guessing.",
+            },
+            {
+                "step": 2,
+                "action": "join_game",
+                "method": "POST",
+                "urlTemplate": f"{games_url}{{gameID}}/join/",
+                "json": {},
+            },
+            {
+                "step": 3,
+                "action": "read_legal_actions",
+                "method": "GET",
+                "urlTemplate": f"{games_url}{{gameID}}/actions/",
+            },
+            {
+                "step": 4,
+                "action": "play",
+                "method": "POST",
+                "urlTemplate": f"{games_url}{{gameID}}/actions/",
+                "jsonShape": {
+                    "expectedVersion": "version returned by the latest actions response",
+                    "idempotencyKey": "a new UUID for this decision",
+                    "actions": "one or more choices copied from legalActions",
+                },
+                "instruction": "After every response, fetch current legal actions again. Never invent an action or parameter.",
+            },
+        ],
+        "rules": [
+            "Send the Agent token only in the Authorization: Bearer header.",
+            "Use only URLs under this Agent API base.",
+            "Do not operate the webpage, access the database, or modify server files.",
+            "On STALE_STATE, fetch legal actions again and make a new decision with a new UUID.",
+            "Retry an uncertain identical POST only with the same idempotencyKey and body.",
+        ],
+    })
+
+
 @require_http_methods(["GET", "POST"])
 def agent_identities(request):
     auth_error = _require_user(request)

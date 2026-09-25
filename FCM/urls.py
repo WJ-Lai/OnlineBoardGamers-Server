@@ -24,6 +24,7 @@ urlpatterns = [
     path("agent/manage/", agent_management.manage_agents, name="agent_manage"),
     path("agent/v1/games/", agent_api.list_games, name="agent_list_games"),
     path("agent/v1/whoami/", agent_api.agent_whoami, name="agent_whoami"),
+    path("agent/v1/bootstrap/", agent_api.agent_bootstrap, name="agent_bootstrap"),
     path("agent/v1/identities/", agent_api.agent_identities, name="agent_identities"),
     path(
         "agent/v1/identities/<int:identity_id>/tokens/",

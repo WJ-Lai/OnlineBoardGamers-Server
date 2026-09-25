@@ -8,6 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 
 from Lobby.models import User
@@ -44,6 +45,7 @@ def _context(request, *, raw_token=None, identity=None, error=None):
         .order_by("label", "id")
     )
     config = None
+    agent_message = None
     if raw_token and identity:
         base_url = request.build_absolute_uri("/").rstrip("/")
         config = (
@@ -51,11 +53,19 @@ def _context(request, *, raw_token=None, identity=None, error=None):
             f"FCM_AGENT_TOKEN={raw_token}\n"
             f"FCM_AGENT_USERNAME={identity.actor_user.username}\n"
         )
+        agent_message = (
+            f"Connect to my Online Board Gamers Food Chain Magnate game at {base_url}. "
+            f"Use Agent Token {raw_token}; first GET {base_url}/FCM/agent/v1/bootstrap/ "
+            "with an Authorization: Bearer header, then follow its workflow exactly. "
+            "If more than one game is available, ask me which game to join. "
+            "Use only the Agent API—do not operate the webpage or modify server files or the database."
+        )
     return {
         "identities": identities,
         "available_scopes": sorted(VALID_AGENT_SCOPES),
         "raw_token": raw_token,
         "connection_config": config,
+        "agent_message": agent_message,
         "created_identity": identity,
         "form_error": error,
         "now": timezone.now(),
@@ -72,6 +82,7 @@ def _render(request, *, status=200, **context):
 
 
 @login_required
+@never_cache
 @require_http_methods(["GET", "POST"])
 def manage_agents(request):
     # PATs are restricted to /agent/v1/ and cannot open this browser control plane.
