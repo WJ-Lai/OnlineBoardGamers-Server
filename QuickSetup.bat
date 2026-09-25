@@ -126,6 +126,9 @@ if exist "BUS\vueBUS\package.json" (
 if exist "CNS\vueCNS\package.json" (
     cd CNS\vueCNS && call npm install && cd ..\..
 ) || echo Warning: npm install failed for CNS
+if exist "FCM\vueFCM\package.json" (
+    cd FCM\vueFCM && call npm install && cd ..\..
+) || echo Warning: npm install failed for FCM
 REM if exist "IND\vueIND\package.json" (
 REM     cd IND\vueIND && call npm install && cd ..\..
 REM ) || echo Warning: npm install failed for IND
@@ -144,6 +147,9 @@ if exist "TGZ\vueTGZ\package.json" (
 if exist "WEB\vueWEB\package.json" (
     cd WEB\vueWEB && call npm install && cd ..\..
 ) || echo Warning: npm install failed for WEB
+if exist "mcp-server\package.json" (
+    cd mcp-server && call npm install && cd ..
+) || echo Warning: npm install failed for FCM Agent gateway
 
 REM Run database migrations
 echo Running database migrations...
