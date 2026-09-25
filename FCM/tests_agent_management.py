@@ -25,6 +25,26 @@ class AgentManagementPageTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("login", response.headers["Location"].lower())
 
+    def test_authenticated_navigation_exposes_agent_access(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="/FCM/agent/manage/"')
+        self.assertContains(response, "AI Agents")
+
+    def test_management_page_contains_first_time_setup_guide(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get("/FCM/agent/manage/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "How it works")
+        self.assertContains(response, "Agent setup instructions")
+        self.assertContains(response, "npm run cli -- doctor")
+        self.assertContains(response, "game link or game ID")
+
     def test_owner_can_create_agent_and_receive_one_time_connection_config(self):
         self.client.force_login(self.owner)
         response = self.client.post(
