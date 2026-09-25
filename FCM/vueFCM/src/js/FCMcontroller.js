@@ -100,6 +100,17 @@ export function isSimulPhase(phase = -1) {
  *
  *****************************************************************/
 
+export function producersForWorkingDay(playerObj) {
+	const producers = playerObj.employees.filter((employee) => rf.PRODUCERS.includes(employee))
+	if (playerObj.employees.includes(rf.NIGHT_SHIFT_MANAGER)) {
+		const extra = producers.filter((employee) =>
+			[rf.ERRAND_BOY, rf.KITCHEN_TRAINEE, rf.BARISTA_TRAINEE].includes(employee)
+		)
+		producers.push(...extra)
+	}
+	return producers
+}
+
 export function endWorkingDaySubphase() {
 	const store = useModelStore()
 	store.clearCoffeeHistoryInfo()
@@ -168,11 +179,7 @@ export function endWorkingDaySubphase() {
 		summary.market.unused = [...currentMarketers]
 
 		// Set up producing
-		let producers = playerObj.employees.filter((e) => rf.PRODUCERS.includes(e))
-		if (playerObj.employees.includes(rf.NIGHT_SHIFT_MANAGER)) {
-			const extra = producers.filter((e) => [rf.ERRAND_BOY, rf.KITCHEN_TRAINEE, rf.BARISTA_TRAINEE].includes(e))
-			producers.push(...extra)
-		}
+		let producers = producersForWorkingDay(playerObj)
 		summary.produce.total = producers.length
 		store.context.remainingProducers = [...producers]
 
@@ -2296,7 +2303,7 @@ export function startPlayerWorkingDaySubphase(subphase) {
 	// --- SUBPHASE: PRODUCE ---
 	else if (subphase === rf.SUBPHASE_PRODUCE) {
 		context.resetJustProduced()
-		store.context.remainingProducers.length = 0
+		store.context.remainingProducers = producersForWorkingDay(playerObj)
 	}
 
 	// --- SUBPHASE: HOUSES ---

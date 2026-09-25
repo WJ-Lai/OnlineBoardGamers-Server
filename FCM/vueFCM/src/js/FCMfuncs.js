@@ -495,6 +495,28 @@ export function exportPlayer(playerIndex) {
 			26 - newRoads
 			27 - coffeeShopMSplayers
 	 */
+// Persist the working-day subphase while remaining compatible with legacy
+// saves, which have no fifth gameflow entry.
+export function exportGameflowData(gameflow) {
+	return [
+		[...gameflow.fullTurnOrder],
+		gameflow.phase,
+		[...gameflow.turnOrder],
+		[...(gameflow.newTurnOrder ?? [])],
+		gameflow.subphase,
+	]
+}
+
+export function importGameflowData(gameflow, flowData) {
+	gameflow.fullTurnOrder = [...flowData[0]]
+	gameflow.phase = flowData[1]
+	gameflow.turnOrder = [...flowData[2]]
+	gameflow.newTurnOrder = Array.isArray(flowData[3]) ? [...flowData[3]] : []
+	gameflow.subphase = Number.isInteger(flowData[4])
+		? flowData[4]
+		: rf.SUBPHASE_HIRING
+}
+
 export function exportFCMmodel(forGameOver, includeContext) {
 	const store = useModelStore()
 	const temp = []
@@ -525,10 +547,7 @@ export function exportFCMmodel(forGameOver, includeContext) {
 
 	// 3: Gameflow - omitted entirely on game over
 	if (!forGameOver) {
-		const gf = store.gameflow
-		const flowData = [[...gf.fullTurnOrder], gf.phase, [...gf.turnOrder]]
-		if (gf.newTurnOrder.length > 0) flowData.push([...gf.newTurnOrder])
-		temp.push(flowData)
+		temp.push(exportGameflowData(store.gameflow))
 	}
 
 	// 4: Active Marketing Campaigns
@@ -724,12 +743,7 @@ export function importFCMmodel(inputB64, forGameOver, includeContext) {
 		store.gameflow.subphase = rf.SUBPHASE_HIRING
 		store.gameflow.newTurnOrder = []
 	} else {
-		store.gameflow.fullTurnOrder = [...inputArr[IMPORT_INDEX][0]]
-		store.gameflow.phase = inputArr[IMPORT_INDEX][1]
-		store.gameflow.subphase = rf.SUBPHASE_HIRING
-		store.gameflow.turnOrder = [...inputArr[IMPORT_INDEX][2]]
-		store.gameflow.newTurnOrder = []
-		if (inputArr[IMPORT_INDEX].length > 3) store.gameflow.newTurnOrder = [...inputArr[IMPORT_INDEX][3]]
+		importGameflowData(store.gameflow, inputArr[IMPORT_INDEX])
 		IMPORT_INDEX++
 	}
 

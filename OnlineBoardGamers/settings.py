@@ -149,10 +149,17 @@ MIDDLEWARE = [
     # This must come before AuthenticationM, and any permissions middleware
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "FCM.agent_auth.AgentTokenAuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "user_visit.middleware.UserVisitMiddleware",
 ]
+
+# Agent API calls use explicit bearer credentials and never create browser
+# sessions. The visit recorder assumes an interactive session exists.
+USER_VISIT_RECORDING_BYPASS = lambda request: request.path.startswith(
+    "/FCM/agent/v1/"
+)
 
 ROOT_URLCONF = "OnlineBoardGamers.urls"
 

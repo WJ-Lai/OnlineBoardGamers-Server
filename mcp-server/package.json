@@ -1,0 +1,24 @@
+{
+  "name": "fcm-mcp-server",
+  "version": "0.3.0",
+  "description": "Rule-gated MCP adapter for Online Board Gamers FCM",
+  "type": "module",
+  "scripts": {
+    "start": "node --import ./register-hook.mjs ./server.mjs",
+    "cli": "node --import ./register-hook.mjs ./cli.mjs",
+    "test": "node --import ./register-hook.mjs --test tests/*.test.mjs"
+  },
+  "bin": {
+    "fcm-agent": "./cli.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "SEE LICENSE IN ../LICENSE.md",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "ajv": "^8.20.0",
+    "pako": "^3.0.2",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.31"
+  }
+}
