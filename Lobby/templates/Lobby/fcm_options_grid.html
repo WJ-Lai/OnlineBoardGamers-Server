@@ -1,4 +1,13 @@
 {% load i18n %}
+{% if user.is_authenticated %}
+  <div class="opts-section" style="margin-bottom:12px;">
+    <div class="section-title">AI players</div>
+    <div class="opt-help">
+      Connect your own AI as a normal FCM player using a revocable Agent token.
+      <a href="{% url 'FCM:agent_manage' %}" target="_blank" rel="noopener">Manage Agent access</a>
+    </div>
+  </div>
+{% endif %}
 <div class="opts-grid">
 <div class="opts-section opts-slate">
   <div class="section-title">{% trans "Game Options" %}</div>

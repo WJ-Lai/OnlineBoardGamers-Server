@@ -1,0 +1,159 @@
+{% extends "Lobby/layout.html" %}
+{% load i18n %}
+{% block title %}FCM Agent access{% endblock %}
+{% block body %}
+    <main class="page"
+          style="max-width: 980px;
+                 margin: 24px auto;
+                 padding: 0 16px">
+        {% include "Lobby/messages.html" %}
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">FCM Agent access</h1>
+                <p class="page-subtitle">Create passwordless identities for your own AI players. Each AI should use a separate token.</p>
+            </div>
+        </div>
+        {% if form_error %}
+            <div class="card"
+                 role="alert"
+                 style="border-color: #b42318;
+                        margin-bottom: 16px;
+                        padding: 16px">{{ form_error }}</div>
+        {% endif %}
+        {% if raw_token %}
+            <section class="card"
+                     style="margin-bottom: 16px;
+                            padding: 18px;
+                            border-color: #1570ef">
+                <h2 class="card-title">Save this connection file now</h2>
+                <p>This token is shown once. It cannot be recovered later; rotate it if it is lost.</p>
+                <textarea id="agent-config"
+                          rows="5"
+                          readonly
+                          style="width: 100%;
+                                 font-family: monospace">{{ connection_config }}</textarea>
+                <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+                    <button class="button button-primary"
+                            type="button"
+                            onclick="copyAgentConfig()">Copy configuration</button>
+                    <button class="button" type="button" onclick="downloadAgentConfig()">Download agent.env</button>
+                </div>
+                <p><strong>Agent username:</strong> {{ created_identity.actor_user.username }}</p>
+            </section>
+            <script>
+      function agentConfigText() {
+        return document.getElementById('agent-config').value;
+      }
+      async function copyAgentConfig() {
+        await navigator.clipboard.writeText(agentConfigText());
+      }
+      function downloadAgentConfig() {
+        const blob = new Blob([agentConfigText()], {type: 'text/plain'});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'fcm-agent.env';
+        link.click();
+        URL.revokeObjectURL(link.href);
+      }
+            </script>
+        {% endif %}
+        <section class="card" style="margin-bottom: 16px; padding: 18px;">
+            <h2 class="card-title">Create an Agent</h2>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create">
+                <p>
+                    <label>
+                        Label
+                        <br>
+                        <input required maxlength="80" name="label" placeholder="Red Bot">
+                    </label>
+                </p>
+                <p>
+                    <label>
+                        Token lifetime
+                        <br>
+                        <input required
+                               min="1"
+                               max="365"
+                               type="number"
+                               name="expires_in_days"
+                               value="30">
+                        days
+                    </label>
+                </p>
+                <fieldset>
+                    <legend>Permissions</legend>
+                    {% for scope in available_scopes %}
+                        <label style="display:block;"><input type="checkbox"
+       name="scopes"
+       value="{{ scope }}"
+       {% if scope != 'fcm:games:create' %}checked{% endif %}> {{ scope }}</label>
+                    {% endfor %}
+                </fieldset>
+                <button class="button button-primary"
+                        type="submit"
+                        style="margin-top:12px">Create Agent and token</button>
+            </form>
+        </section>
+        {% for identity in identities %}
+            <section class="card" style="margin-bottom: 16px; padding: 18px;">
+                <h2 class="card-title">{{ identity.label }}</h2>
+                <p><strong>Seat username:</strong> {{ identity.actor_user.username }}</p>
+                <p><strong>Status:</strong> {% if identity.is_active %}Active{% else %}Disabled{% endif %}</p>
+                {% if identity.is_active %}
+                    <form method="post" style="margin: 12px 0;">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="rotate">
+                        <input type="hidden" name="identity_id" value="{{ identity.id }}">
+                        <input name="token_name"
+                               value="replacement"
+                               maxlength="80"
+                               aria-label="Token name">
+                        <input name="expires_in_days"
+                               value="30"
+                               min="1"
+                               max="365"
+                               type="number"
+                               aria-label="Token lifetime in days">
+                        {% for scope in available_scopes %}
+                            <label><input type="checkbox"
+       name="scopes"
+       value="{{ scope }}"
+       {% if scope != 'fcm:games:create' %}checked{% endif %}> {{ scope }}</label>
+                        {% endfor %}
+                        <button class="button" type="submit">Create replacement token</button>
+                    </form>
+                {% endif %}
+                <ul>
+                    {% for credential in identity.credentials.all %}
+                        <li>
+                            {{ credential.name }} · {{ credential.prefix }} ·
+                            {% if credential.revoked_at %}revoked{% elif credential.expires_at and credential.expires_at <= now %}expired{% else %}active{% endif %}
+                            {% if not credential.revoked_at %}
+                                <form method="post" style="display:inline;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="revoke">
+                                    <input type="hidden" name="credential_id" value="{{ credential.id }}">
+                                    <button class="button button-sm" type="submit">Revoke</button>
+                                </form>
+                            {% endif %}
+                        </li>
+                    {% empty %}
+                        <li>No tokens.</li>
+                    {% endfor %}
+                </ul>
+                {% if identity.is_active %}
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="disable">
+                        <input type="hidden" name="identity_id" value="{{ identity.id }}">
+                        <button class="button button-danger" type="submit">Disable Agent</button>
+                    </form>
+                {% endif %}
+            </section>
+        {% empty %}
+            <p>No Agent identities yet.</p>
+        {% endfor %}
+    </main>
+{% endblock %}

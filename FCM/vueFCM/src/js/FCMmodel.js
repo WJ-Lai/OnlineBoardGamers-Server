@@ -14,6 +14,11 @@ import { useModelStore } from "../stores/FCMstore.js"
 import { usePersonalStore } from "../stores/FCMpersonal"
 import i18n from "../i18n"
 
+export function shouldResumeWorkingSubphase(gameflow) {
+	return gameflow.phase === rf.PHASE_WORKING_DAY &&
+		gameflow.subphase !== rf.SUBPHASE_HIRING
+}
+
 export async function initGame() {
 	const store = useModelStore()
 	const personal = usePersonalStore()
@@ -307,7 +312,9 @@ export async function initGame() {
 	// Allow play
 	personal.haltPlay = false
 	// This must be the last item
-	if (personal.canPlay()) controller.startPlayerTurn()
+	if (personal.canPlay()) {
+		controller.startPlayerTurn(shouldResumeWorkingSubphase(store.gameflow))
+	}
 } // end initGame
 
 export function setInternalStartingOptions(startingOptionsArray) {
