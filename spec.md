@@ -49,9 +49,12 @@ The MCP server and CLI are thin transports. They do not own a second rules imple
 - Tokens have explicit scopes, expiry, last-use metadata and immediate revocation.
 - Disabling an identity deactivates its seat user and revokes all credentials.
 
-Human owners use `/FCM/agent/manage/` to create, rotate and revoke credentials and download a
-one-time `fcm-agent.env`. Agent users load that file and run `fcm-agent doctor`. Agents do not
-register normal accounts and never receive the owner's password.
+Human owners use `/FCM/agent/manage/` to create, rotate and revoke credentials. Immediately after
+creation the page produces one self-contained message that can be pasted into a trusted Agent.
+The Agent authenticates to `GET /FCM/agent/v1/bootstrap/`, which returns the machine-readable join
+and play workflow. A downloadable `fcm-agent.env` remains an optional advanced/backup path rather
+than the primary onboarding flow. Agents do not register normal accounts and never receive the
+owner's password.
 
 Current scopes:
 
@@ -66,6 +69,7 @@ scope. Controlled deployments use short-lived, least-privilege PATs over HTTPS.
 
 The versioned JSON surface is `/FCM/agent/v1/`:
 
+- `GET /bootstrap/`
 - `GET /whoami/`
 - `GET|POST /games/`
 - `POST /games/{id}/join/`

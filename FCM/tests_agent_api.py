@@ -698,6 +698,52 @@ class FCMAgentIdentityTokenTests(TestCase):
         self.assertNotIn("secretHash", json.dumps(payload))
         self.assertEqual(identity.credentials.get().scopes, ["fcm:play", "fcm:read"])
 
+    def test_bootstrap_requires_an_agent_token_not_an_owner_session(self):
+        anonymous = self.client.get("/FCM/agent/v1/bootstrap/")
+        self.assertEqual(anonymous.status_code, 401)
+        self.assertEqual(anonymous.json()["error"]["code"], "AGENT_TOKEN_REQUIRED")
+        self.assertIn("Authorization", anonymous.json()["error"]["message"])
+
+        self.client.force_login(self.owner)
+        owner_session = self.client.get("/FCM/agent/v1/bootstrap/")
+        self.assertEqual(owner_session.status_code, 403)
+        self.assertEqual(owner_session.json()["error"]["code"], "AGENT_TOKEN_REQUIRED")
+
+    def test_bootstrap_rejects_a_token_that_cannot_complete_the_play_workflow(self):
+        created = self._create_identity(scopes=["fcm:read"]).json()
+        self.client.logout()
+
+        response = self.client.get(
+            "/FCM/agent/v1/bootstrap/",
+            HTTP_AUTHORIZATION=f"Bearer {created['token']}",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"]["code"], "INSUFFICIENT_SCOPE")
+        self.assertIn("fcm:play", response.json()["error"]["message"])
+
+    def test_bootstrap_is_self_describing_and_never_echoes_the_token(self):
+        created = self._create_identity().json()
+        token = created["token"]
+        self.client.logout()
+
+        response = self.client.get(
+            "/FCM/agent/v1/bootstrap/",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        rendered = json.dumps(payload)
+        self.assertEqual(payload["protocol"], "fcm-agent-v1")
+        self.assertEqual(payload["authenticatedAs"], created["identity"]["actorUsername"])
+        self.assertEqual([step["action"] for step in payload["workflow"]], [
+            "list_games", "join_game", "read_legal_actions", "play",
+        ])
+        self.assertIn("/FCM/agent/v1/games/", payload["workflow"][0]["url"])
+        self.assertNotIn(token, rendered)
+        self.assertIn("Never invent an action", rendered)
+
     def test_empty_scope_list_is_rejected_instead_of_granting_every_scope(self):
         response = self._create_identity(scopes=[])
 

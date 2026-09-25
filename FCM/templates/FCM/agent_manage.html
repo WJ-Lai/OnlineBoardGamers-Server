@@ -10,32 +10,16 @@
         <div class="page-header">
             <div>
                 <h1 class="page-title">FCM Agent access</h1>
-                <p class="page-subtitle">Connect your own AI players to Food Chain Magnate. The AI does not need an OBG account or your password.</p>
+                <p class="page-subtitle">Create a separate player for your AI, then copy one message to it.</p>
             </div>
         </div>
         <section class="card card-soft" style="margin-bottom: 16px; padding: 18px;">
-            <h2 class="card-title">How it works</h2>
-            <ol style="line-height:1.7; margin-bottom:12px;">
-                <li>Create one Agent below for each AI player.</li>
-                <li>Download the one-time <code>fcm-agent.env</code> connection file and give it only to that AI.</li>
-                <li>Create an FCM game normally, then give the AI the game link or game ID. The AI joins as its own player.</li>
+            <h2 class="card-title">Connect an AI in three steps</h2>
+            <ol style="line-height:1.8; margin-bottom:0;">
+                <li>Create an AI player below.</li>
+                <li>Copy the connection message shown once after creation.</li>
+                <li>Paste that message into your AI Agent. It will handle the connection itself.</li>
             </ol>
-            <p style="margin-bottom:8px;"><strong>The AI can use the included CLI, MCP server, or HTTP API.</strong> It should never operate the webpage or receive your OBG password.</p>
-            <details>
-                <summary style="cursor:pointer; font-weight:600;">Agent setup instructions</summary>
-                <div style="margin-top:12px; line-height:1.6;">
-                    <p>Give the AI the downloaded connection file and access to this repository's <code>mcp-server</code> directory. From the project root it should run:</p>
-                    <pre style="overflow:auto; padding:12px; border-radius:8px; background:var(--color-surface-muted, #f4f4f4);"><code>cd FCM/vueFCM &amp;&amp; npm ci
-cd ../../mcp-server &amp;&amp; npm ci
-set -a
-. /safe/path/fcm-agent.env
-set +a
-npm run cli -- doctor
-npm run cli -- games
-npm run cli -- join GAME_ID</code></pre>
-                    <p>A successful <code>doctor</code> returns <code>ok: true</code>. After joining, the AI reads legal actions from the server and submits only rule-validated actions.</p>
-                </div>
-            </details>
         </section>
         {% if form_error %}
             <div class="card"
@@ -49,27 +33,33 @@ npm run cli -- join GAME_ID</code></pre>
                      style="margin-bottom: 16px;
                             padding: 18px;
                             border-color: #1570ef">
-                <h2 class="card-title">Save this connection file now</h2>
-                <p>This token is shown once. It cannot be recovered later; rotate it if it is lost.</p>
-                <textarea id="agent-config"
-                          rows="5"
+                <h2 class="card-title">Send this message to your AI</h2>
+                <p>It contains a secret Token and is shown only once. Send it only to an AI you trust.</p>
+                <textarea id="agent-message"
+                          rows="7"
                           readonly
                           style="width: 100%;
-                                 font-family: monospace">{{ connection_config }}</textarea>
+                                 font-family: inherit">{{ agent_message }}</textarea>
                 <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
                     <button class="button button-primary"
                             type="button"
-                            onclick="copyAgentConfig()">Copy configuration</button>
-                    <button class="button" type="button" onclick="downloadAgentConfig()">Download agent.env</button>
+                            onclick="copyAgentMessage()">Copy message for AI</button>
                 </div>
-                <p><strong>Agent username:</strong> {{ created_identity.actor_user.username }}</p>
+                <p id="copy-result" role="status" style="margin-top:8px;"></p>
+                <details style="margin-top:12px;">
+                    <summary style="cursor:pointer;">Optional: download a backup connection file</summary>
+                    <p>The file contains the same server address and Token. Most users do not need it.</p>
+                    <textarea id="agent-config" hidden readonly>{{ connection_config }}</textarea>
+                    <button class="button button-sm" type="button" onclick="downloadAgentConfig()">Download backup</button>
+                </details>
             </section>
             <script>
+      async function copyAgentMessage() {
+        await navigator.clipboard.writeText(document.getElementById('agent-message').value);
+        document.getElementById('copy-result').textContent = 'Copied. Paste it into your AI Agent.';
+      }
       function agentConfigText() {
         return document.getElementById('agent-config').value;
-      }
-      async function copyAgentConfig() {
-        await navigator.clipboard.writeText(agentConfigText());
       }
       function downloadAgentConfig() {
         const blob = new Blob([agentConfigText()], {type: 'text/plain'});
@@ -82,16 +72,15 @@ npm run cli -- join GAME_ID</code></pre>
             </script>
         {% endif %}
         <section class="card" style="margin-bottom: 16px; padding: 18px;">
-            <h2 class="card-title">Create an Agent</h2>
-            <p>Each Agent gets a separate player identity and a revocable token. For normal play, keep the default read and play permissions.</p>
+            <h2 class="card-title">Create an AI player</h2>
             <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="create">
                 <p>
                     <label>
-                        Label
+                        Name
                         <br>
-                        <input required maxlength="80" name="label" placeholder="Red Bot">
+                        <input required maxlength="80" name="label" placeholder="My FCM Bot">
                     </label>
                 </p>
                 <p>
@@ -107,54 +96,58 @@ npm run cli -- join GAME_ID</code></pre>
                         days
                     </label>
                 </p>
-                <fieldset>
-                    <legend>Permissions</legend>
-                    {% for scope in available_scopes %}
-                        <label style="display:block;"><input type="checkbox"
-       name="scopes"
-       value="{{ scope }}"
-       {% if scope != 'fcm:games:create' %}checked{% endif %}> {{ scope }}</label>
-                    {% endfor %}
-                </fieldset>
+                <details>
+                    <summary style="cursor:pointer;">Permissions (optional)</summary>
+                    <fieldset style="margin-top:8px;">
+                        {% for scope in available_scopes %}
+                            <label style="display:block;"><input type="checkbox"
+           name="scopes"
+           value="{{ scope }}"
+           {% if scope != 'fcm:games:create' %}checked{% endif %}>
+                                {% if scope == 'fcm:read' %}Read game information{% elif scope == 'fcm:play' %}Play as this AI{% else %}Create new games{% endif %}
+                            </label>
+                        {% endfor %}
+                    </fieldset>
+                </details>
                 <button class="button button-primary"
                         type="submit"
-                        style="margin-top:12px">Create Agent and token</button>
+                        style="margin-top:12px">Create AI and connection message</button>
             </form>
         </section>
+        <h2>Existing AI players</h2>
         {% for identity in identities %}
             <section class="card" style="margin-bottom: 16px; padding: 18px;">
                 <h2 class="card-title">{{ identity.label }}</h2>
                 <p><strong>Seat username:</strong> {{ identity.actor_user.username }}</p>
                 <p><strong>Status:</strong> {% if identity.is_active %}Active{% else %}Disabled{% endif %}</p>
                 {% if identity.is_active %}
-                    <form method="post" style="margin: 12px 0;">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="rotate">
-                        <input type="hidden" name="identity_id" value="{{ identity.id }}">
-                        <input name="token_name"
-                               value="replacement"
-                               maxlength="80"
-                               aria-label="Token name">
-                        <input name="expires_in_days"
-                               value="30"
-                               min="1"
-                               max="365"
-                               type="number"
-                               aria-label="Token lifetime in days">
-                        {% for scope in available_scopes %}
-                            <label><input type="checkbox"
-       name="scopes"
-       value="{{ scope }}"
-       {% if scope != 'fcm:games:create' %}checked{% endif %}> {{ scope }}</label>
-                        {% endfor %}
-                        <button class="button" type="submit">Create replacement token</button>
-                    </form>
+                    <details style="margin:12px 0;">
+                        <summary style="cursor:pointer;">Replace a lost or expired Token</summary>
+                        <form method="post" style="margin-top:8px;">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="rotate">
+                            <input type="hidden" name="identity_id" value="{{ identity.id }}">
+                            <input type="hidden" name="token_name" value="replacement">
+                            <label>Lifetime <input name="expires_in_days" value="30" min="1" max="365" type="number"> days</label>
+                            {% for scope in available_scopes %}
+                                <label style="display:block;"><input type="checkbox"
+           name="scopes"
+           value="{{ scope }}"
+           {% if scope != 'fcm:games:create' %}checked{% endif %}>
+                                    {% if scope == 'fcm:read' %}Read game information{% elif scope == 'fcm:play' %}Play as this AI{% else %}Create new games{% endif %}
+                                </label>
+                            {% endfor %}
+                            <button class="button" type="submit" style="margin-top:8px;">Create replacement Token</button>
+                        </form>
+                    </details>
                 {% endif %}
                 <ul>
                     {% for credential in identity.credentials.all %}
-                        <li>
-                            {{ credential.name }} · {{ credential.prefix }} ·
+                        <li style="margin-bottom:8px;">
+                            Token {{ credential.prefix }} ·
                             {% if credential.revoked_at %}revoked{% elif credential.expires_at and credential.expires_at <= now %}expired{% else %}active{% endif %}
+                            {% if credential.expires_at %} · expires {{ credential.expires_at|date:"Y-m-d H:i T" }}{% endif %}
+                            {% if credential.last_used_at %} · last used {{ credential.last_used_at|date:"Y-m-d H:i T" }}{% endif %}
                             {% if not credential.revoked_at %}
                                 <form method="post" style="display:inline;">
                                     {% csrf_token %}

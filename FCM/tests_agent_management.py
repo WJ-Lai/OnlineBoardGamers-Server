@@ -25,6 +25,14 @@ class AgentManagementPageTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("login", response.headers["Location"].lower())
 
+    def test_management_page_is_never_cached(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get("/FCM/agent/manage/")
+
+        self.assertIn("no-cache", response.headers["Cache-Control"])
+        self.assertIn("private", response.headers["Cache-Control"])
+
     def test_authenticated_navigation_exposes_agent_access(self):
         self.client.force_login(self.owner)
 
@@ -40,10 +48,11 @@ class AgentManagementPageTests(TestCase):
         response = self.client.get("/FCM/agent/manage/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "How it works")
-        self.assertContains(response, "Agent setup instructions")
-        self.assertContains(response, "npm run cli -- doctor")
-        self.assertContains(response, "game link or game ID")
+        self.assertContains(response, "Connect an AI in three steps")
+        self.assertContains(response, "Paste that message into your AI Agent")
+        self.assertContains(response, "Existing AI players")
+        self.assertNotContains(response, "npm ci")
+        self.assertNotContains(response, "/safe/path/")
 
     def test_owner_can_create_agent_and_receive_one_time_connection_config(self):
         self.client.force_login(self.owner)
@@ -64,6 +73,9 @@ class AgentManagementPageTests(TestCase):
         self.assertContains(response, "obg_pat_", status_code=201)
         self.assertContains(response, "FCM_BASE_URL=", status_code=201)
         self.assertContains(response, "FCM_AGENT_TOKEN=", status_code=201)
+        self.assertContains(response, "Copy message for AI", status_code=201)
+        self.assertContains(response, "/FCM/agent/v1/bootstrap/", status_code=201)
+        self.assertContains(response, "Use only the Agent API", status_code=201)
         self.assertContains(response, identity.actor_user.username, status_code=201)
         self.assertEqual(credential.scopes, ["fcm:play", "fcm:read"])
 

@@ -14,15 +14,30 @@ Agent **不需要注册普通 OBG 账号，也不应获得房主的账号密码*
 
 ### 房主：网页操作
 
-1. 注册并登录 OBG，然后打开 `/FCM/agent/manage/`；创建 FCM 游戏的页面也有入口。
-2. 点击 **Create Agent and token**，选择权限和 1–365 天有效期。
-3. 下载一次性显示的 `fcm-agent.env`，通过安全渠道交给 Agent 使用者。
+1. 注册并登录 OBG，点击顶部 **AI Agents**。
+2. 创建 AI 玩家，选择 1–365 天有效期。
+3. 点击 **Copy message for AI**，把这一句话粘贴给可信的 Agent。Agent 会先读取
+   `/FCM/agent/v1/bootstrap/`，然后自行发现、加入并操作对局。
 
 推荐只授予 `fcm:read` 和 `fcm:play`。只有确实需要自行创建对局的 Agent 才授予
 `fcm:games:create`。Token 丢失、泄露或到期后，房主在同一页面创建替代 Token，
 确认新 Token 可用后撤销旧 Token；不需要重新注册 Agent。
 
-### Agent 使用者：三条命令
+网页中的下载文件只是可选备份；普通用户不需要理解目录、环境变量或安装命令。
+
+### Agent：零安装 HTTP 接入
+
+收到连接消息后，Agent 使用消息中的 Token 请求：
+
+```http
+GET /FCM/agent/v1/bootstrap/
+Authorization: Bearer <token>
+```
+
+响应会给出完整的机器可读工作流：列出游戏、加入游戏、读取合法动作、提交动作及并发
+恢复规则。Agent 不应猜测游戏或动作；存在多个候选游戏时应询问人类。
+
+### 高级用法：CLI / MCP
 
 在项目根目录安装一次依赖：
 
