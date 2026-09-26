@@ -1,21 +1,48 @@
 """Authentication primitives for scoped FCM Agent personal access tokens."""
 
+import base64
 import hashlib
 import hmac
 import re
 import secrets
 
+from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from .models import AgentCredential
 
 VALID_AGENT_SCOPES = frozenset({"fcm:read", "fcm:play", "fcm:games:create"})
-DEFAULT_AGENT_SCOPES = ("fcm:play", "fcm:read")
+DEFAULT_AGENT_SCOPES = tuple(sorted(VALID_AGENT_SCOPES))
 TOKEN_RE = re.compile(r"^obg_pat_([A-Za-z0-9]{12})_([A-Za-z0-9_-]{32,})$")
 
 
 def _digest(secret):
     return hashlib.sha256(secret.encode("utf-8")).hexdigest()
+
+
+def _derived_secret(prefix):
+    digest = hmac.new(
+        settings.SECRET_KEY.encode("utf-8"),
+        f"fcm-agent-token:{prefix}".encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+
+
+def reveal_agent_token(credential):
+    """Reconstruct tokens issued by the current revealable token scheme."""
+    secret = _derived_secret(credential.prefix)
+    if not hmac.compare_digest(credential.secret_hash, _digest(secret)):
+        return None
+    return f"obg_pat_{credential.prefix}_{secret}"
+
+
+def mask_agent_token(credential):
+    raw_token = reveal_agent_token(credential)
+    if raw_token is None:
+        return f"obg_pat_{credential.prefix}_••••••••"
+    return f"{raw_token[:20]}••••••••{raw_token[-6:]}"
 
 
 def validate_scopes(scopes):
@@ -30,16 +57,20 @@ def validate_scopes(scopes):
 
 def issue_agent_token(identity, *, scopes=None, name="default", expires_at=None):
     granted = validate_scopes(list(DEFAULT_AGENT_SCOPES if scopes is None else scopes))
-    prefix = secrets.token_hex(6)
-    secret = secrets.token_urlsafe(32)
-    credential = AgentCredential.objects.create(
-        identity=identity,
-        name=name,
-        prefix=prefix,
-        secret_hash=_digest(secret),
-        scopes=granted,
-        expires_at=expires_at,
-    )
+    with transaction.atomic():
+        AgentIdentity = identity.__class__
+        locked_identity = AgentIdentity.objects.select_for_update().get(pk=identity.pk)
+        locked_identity.credentials.all().delete()
+        prefix = secrets.token_hex(6)
+        secret = _derived_secret(prefix)
+        credential = AgentCredential.objects.create(
+            identity=locked_identity,
+            name=name,
+            prefix=prefix,
+            secret_hash=_digest(secret),
+            scopes=granted,
+            expires_at=expires_at,
+        )
     return credential, f"obg_pat_{prefix}_{secret}"
 
 

@@ -225,6 +225,14 @@ export class FCMAdapter {
     // ★ 官方入口：处理全新局（空 gameData）与已有局
     await this.modules.model.initGame()
 
+    // Authentication keeps stable internal usernames; decisions and history use
+    // the human-selected Agent labels supplied by Django.
+    const store = this.modules.storeMod.useModelStore()
+    for (let index = 0; index < store.players.length; index += 1) {
+      const displayName = d.displayNames?.[index]
+      if (displayName) store.players[index].displayName = displayName
+    }
+
     // initGame 会再次写 personal.*，重设一次确保 gameID/latestUpdate 正确
     setPersonalState({
       gameID: d.id,
@@ -264,6 +272,13 @@ export class FCMAdapter {
    */
   getState() {
     const store = this.store
+    const rf = this.modules.reference ?? {}
+    const copy = (value, fallback = []) => JSON.parse(JSON.stringify(value ?? fallback))
+    const describe = (items, ids) => (ids ?? []).map((id) => ({
+      id,
+      title: items?.[id]?.title ?? String(id),
+      description: items?.[id]?.description ?? '',
+    }))
     return {
       gameID: this.currentGameID,
       version: this.currentVersion ?? String(this.api.latestUpdate ?? '0'),
@@ -274,13 +289,16 @@ export class FCMAdapter {
       subphase: store.gameflow.subphase,
       turnOrder: store.gameflow.turnOrder,
       newTurnOrder: store.gameflow.newTurnOrder,
+      fullTurnOrder: store.gameflow.fullTurnOrder,
       bank: store.bank,
+      bankBroken: store.bankBroken,
       mySeat: this.playerIndex,
       myName: this.actorName ?? this.api.username,
       players: store.players.map((p, i) => ({
         index: i,
         name: p.displayName ?? p.name,
         money: p.money,
+        bankrupt: Boolean(p.bankrupt),
         resources: [...(p.resources ?? [])],
         // employees = 上班中（含 BLANK=-1 空槽）；beach = 待命区
         employees: [...(p.employees ?? [])],
@@ -288,6 +306,8 @@ export class FCMAdapter {
         ceoSlots: p.ceoSlots,
         restaurants: p.restaurants,
         milestones: p.milestones,
+        marketers: copy(p.marketers),
+        coffeeShops: copy(p.coffeeShops),
       })),
       availableEmployees: Object.fromEntries(
         Object.entries(store.availableEmployees ?? {}).filter(([, n]) => n > 0),
@@ -298,7 +318,40 @@ export class FCMAdapter {
         restaurantDistances: this.modules.model?.giveRestaurantRangesForHouse?.(need.number) ?? [],
       })),
       activeCampaigns: (store.campaigns ?? []).map((campaign) => ({ ...campaign })),
-      startingOptions: store.startingOptions,
+      availableMilestones: copy(store.availableMilestones),
+      availableMarketingCampaigns: copy(store.availableMarketingCampaigns),
+      board: {
+        tiles: copy(store.mapData?.tiles),
+        dimensions: copy(store.mapData?.dimensions),
+        houses: copy(store.houses),
+        gardens: copy(store.gardens),
+        needs: copy(store.needs),
+        campaigns: copy(store.campaigns),
+        freeways: copy(store.freeways),
+        parks: copy(store.parks),
+        newRoads: copy(store.newRoads),
+      },
+      history: copy(store.history),
+      chat: copy(store.chatData),
+      untrustedTextFields: ['chat'],
+      startingOptions: copy(store.startingOptions, {}),
+      catalog: {
+        goods: [
+          { id: 0, name: 'lemonade' },
+          { id: 1, name: 'coke' },
+          { id: 2, name: 'beer' },
+          { id: 3, name: 'pizza' },
+          { id: 4, name: 'burger' },
+        ],
+        employees: describe(rf.EMPLOYEES_STR, Array.from({ length: 32 }, (_, id) => id)),
+        milestones: describe(rf.MILESTONES_STR, rf.BASE_GAME_MILESTONES),
+        campaignTypes: [
+          { id: 0, name: 'radio' },
+          { id: 1, name: 'airplane' },
+          { id: 2, name: 'mailbox' },
+          { id: 3, name: 'billboard' },
+        ],
+      },
     }
   }
 

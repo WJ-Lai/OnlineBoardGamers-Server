@@ -183,9 +183,23 @@ export class EngineRuntime {
         (index) => state.players?.[index]?.name,
       ).filter(Boolean),
     }
-    const canonicalSave = transport.canonicalSave ?? (
+    const capturedSave = transport.canonicalSave ?? (
       transport.simultaneousSubmission ? null : syntheticSave
     )
+    // The legacy FCM controller emits displayName values in nextPlayer. Agent labels
+    // are presentation-only; convert them back to stable internal account names
+    // before Django validates membership and commits the turn.
+    const displayToActor = new Map(
+      (snapshot.displayNames ?? snapshot.playerNames).map(
+        (displayName, index) => [displayName, snapshot.playerNames[index]],
+      ),
+    )
+    const canonicalSave = capturedSave == null ? null : {
+      ...capturedSave,
+      nextPlayer: (capturedSave.nextPlayer ?? []).map(
+        (name) => displayToActor.get(name) ?? name,
+      ),
+    }
     return {
       ...(await this.metadata()),
       gameID: snapshot.id,

@@ -1,74 +1,82 @@
 """Human-owner control plane for FCM Agent identities and credentials."""
 
 import uuid
-from datetime import timedelta
+from collections import defaultdict
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.text import slugify
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_GET, require_http_methods
 
-from Lobby.models import User
+from Lobby.models import GamePlayer, User
 
 from .agent_auth import (
     DEFAULT_AGENT_SCOPES,
-    VALID_AGENT_SCOPES,
     issue_agent_token,
-    validate_scopes,
+    mask_agent_token,
+    reveal_agent_token,
 )
 from .models import AgentCredential, AgentIdentity
 
 
-def _expires_at(raw_days):
+def _agent_message(request, raw_token):
+    base_url = request.build_absolute_uri("/").rstrip("/")
+    return (
+        f"Connect to my Online Board Gamers Food Chain Magnate games at {base_url}. "
+        f"Use Agent Token {raw_token}; first GET {base_url}/FCM/agent/v1/bootstrap/ "
+        "with an Authorization: Bearer header, then follow its workflow exactly. "
+        "If more than one game is available, ask me which game to join. "
+        "Use only the Agent API—do not operate the webpage or modify server files or the database."
+    )
+
+
+def _context(request, *, error=None):
     try:
-        days = int(raw_days)
-    except (TypeError, ValueError) as error:
-        raise ValueError("Expiry must be a whole number between 1 and 365 days.") from error
-    if not 1 <= days <= 365:
-        raise ValueError("Expiry must be between 1 and 365 days.")
-    return timezone.now() + timedelta(days=days)
-
-
-def _scopes(request):
-    scopes = request.POST.getlist("scopes")
-    return validate_scopes(scopes)
-
-
-def _context(request, *, raw_token=None, identity=None, error=None):
+        open_identity_id = int(request.GET.get("agent", ""))
+    except (TypeError, ValueError):
+        open_identity_id = None
     identities = (
-        AgentIdentity.objects.filter(owner=request.user)
+        AgentIdentity.objects.filter(owner=request.user, disabled_at__isnull=True)
         .select_related("actor_user")
         .prefetch_related("credentials")
         .order_by("label", "id")
     )
-    config = None
-    agent_message = None
-    if raw_token and identity:
-        base_url = request.build_absolute_uri("/").rstrip("/")
-        config = (
-            f"FCM_BASE_URL={base_url}\n"
-            f"FCM_AGENT_TOKEN={raw_token}\n"
-            f"FCM_AGENT_USERNAME={identity.actor_user.username}\n"
+    identities = list(identities)
+    games_by_actor = defaultdict(list)
+    if identities:
+        memberships = (
+            GamePlayer.objects.filter(
+                player_id__in=[identity.actor_user_id for identity in identities],
+                game__gameCode="FCM",
+                is_kicked=False,
+            )
+            .exclude(game__gameStatus="FINISHED")
+            .select_related("game")
+            .order_by("-game__latestUpdate", "-game_id")
         )
-        agent_message = (
-            f"Connect to my Online Board Gamers Food Chain Magnate game at {base_url}. "
-            f"Use Agent Token {raw_token}; first GET {base_url}/FCM/agent/v1/bootstrap/ "
-            "with an Authorization: Bearer header, then follow its workflow exactly. "
-            "If more than one game is available, ask me which game to join. "
-            "Use only the Agent API—do not operate the webpage or modify server files or the database."
-        )
+        for membership in memberships:
+            games_by_actor[membership.player_id].append(membership.game)
+
+    cards = []
+    for identity in identities:
+        credential = next(iter(identity.credentials.all()), None)
+        cards.append({
+            "identity": identity,
+            "credential": credential,
+            "masked_token": mask_agent_token(credential) if credential else None,
+            "token_revealable": bool(credential and reveal_agent_token(credential)),
+            "games": games_by_actor[identity.actor_user_id],
+        })
     return {
-        "identities": identities,
-        "available_scopes": sorted(VALID_AGENT_SCOPES),
-        "raw_token": raw_token,
-        "connection_config": config,
-        "agent_message": agent_message,
-        "created_identity": identity,
+        "agent_cards": cards,
         "form_error": error,
-        "now": timezone.now(),
+        "open_identity_id": open_identity_id,
     }
 
 
@@ -96,13 +104,9 @@ def manage_agents(request):
         label = request.POST.get("label", "").strip()
         if not 1 <= len(label) <= 80:
             return _render(request, status=400, error="Label must contain 1 to 80 characters.")
-        try:
-            scopes = _scopes(request)
-            expires_at = _expires_at(request.POST.get("expires_in_days"))
-        except ValueError as error:
-            return _render(request, status=400, error=str(error))
         with transaction.atomic():
-            actor = User(username=f"fcm-agent-{request.user.id}-{uuid.uuid4().hex[:12]}")
+            short_name = slugify(label)[:40] or "agent"
+            actor = User(username=f"ai-{short_name}-{uuid.uuid4().hex[:6]}")
             actor.set_unusable_password()
             actor.save()
             identity = AgentIdentity.objects.create(
@@ -110,14 +114,15 @@ def manage_agents(request):
                 actor_user=actor,
                 label=label,
             )
-            _credential, raw_token = issue_agent_token(
+            issue_agent_token(
                 identity,
-                scopes=scopes,
-                expires_at=expires_at,
+                scopes=DEFAULT_AGENT_SCOPES,
+                expires_at=None,
             )
-        return _render(request, status=201, raw_token=raw_token, identity=identity)
+        messages.success(request, f"{label} created.")
+        return redirect(f"{reverse('FCM:agent_manage')}?agent={identity.id}#agent-{identity.id}")
 
-    if action == "rotate":
+    if action == "refresh":
         identity = AgentIdentity.objects.filter(
             id=request.POST.get("identity_id"),
             owner=request.user,
@@ -125,36 +130,16 @@ def manage_agents(request):
         ).select_related("actor_user").first()
         if identity is None:
             return _render(request, status=404, error="Agent identity does not exist.")
-        name = request.POST.get("token_name", "default").strip()
-        if not 1 <= len(name) <= 80:
-            return _render(request, status=400, error="Token name must contain 1 to 80 characters.")
-        try:
-            scopes = _scopes(request)
-            expires_at = _expires_at(request.POST.get("expires_in_days"))
-        except ValueError as error:
-            return _render(request, status=400, error=str(error))
-        _credential, raw_token = issue_agent_token(
+        issue_agent_token(
             identity,
-            scopes=scopes,
-            name=name,
-            expires_at=expires_at,
+            scopes=DEFAULT_AGENT_SCOPES,
+            name="default",
+            expires_at=None,
         )
-        return _render(request, status=201, raw_token=raw_token, identity=identity)
+        messages.success(request, f"Token refreshed for {identity.label}. The old Token no longer works.")
+        return redirect(f"{reverse('FCM:agent_manage')}?agent={identity.id}#agent-{identity.id}")
 
-    if action == "revoke":
-        credential = AgentCredential.objects.filter(
-            id=request.POST.get("credential_id"),
-            identity__owner=request.user,
-        ).first()
-        if credential is None:
-            return _render(request, status=404, error="Agent token does not exist.")
-        if credential.revoked_at is None:
-            credential.revoked_at = timezone.now()
-            credential.save(update_fields=["revoked_at"])
-        messages.success(request, "Agent token revoked.")
-        return redirect("FCM:agent_manage")
-
-    if action == "disable":
+    if action == "delete":
         identity = AgentIdentity.objects.filter(
             id=request.POST.get("identity_id"),
             owner=request.user,
@@ -165,11 +150,35 @@ def manage_agents(request):
         with transaction.atomic():
             AgentIdentity.objects.filter(pk=identity.pk).update(disabled_at=now)
             User.objects.filter(pk=identity.actor_user_id).update(is_active=False)
-            AgentCredential.objects.filter(
-                identity=identity,
-                revoked_at__isnull=True,
-            ).update(revoked_at=now)
-        messages.success(request, "Agent disabled and all of its tokens revoked.")
+            AgentCredential.objects.filter(identity=identity).delete()
+        messages.success(request, f"{identity.label} deleted.")
         return redirect("FCM:agent_manage")
 
     return _render(request, status=400, error="Unknown management action.")
+
+
+@login_required
+@never_cache
+@require_GET
+def reveal_token(request, identity_id):
+    identity = AgentIdentity.objects.filter(
+        id=identity_id,
+        owner=request.user,
+        disabled_at__isnull=True,
+    ).prefetch_related("credentials").first()
+    if identity is None:
+        return JsonResponse({"error": "Agent does not exist"}, status=404)
+    credential = next(iter(identity.credentials.all()), None)
+    if credential is None:
+        return JsonResponse({"error": "Agent has no Token"}, status=404)
+    raw_token = reveal_agent_token(credential)
+    if raw_token is None:
+        return JsonResponse(
+            {"error": "This older Token cannot be displayed. Refresh it once to enable reveal and copy."},
+            status=409,
+        )
+    return JsonResponse({
+        "token": raw_token,
+        "maskedToken": mask_agent_token(credential),
+        "connectionMessage": _agent_message(request, raw_token),
+    })

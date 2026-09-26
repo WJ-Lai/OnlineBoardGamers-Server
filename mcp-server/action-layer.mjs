@@ -986,19 +986,47 @@ export class FCMActionLayer {
 
   _snapshot() {
     const s = this.store
+    const copy = (value, fallback = []) => JSON.parse(JSON.stringify(value ?? fallback))
     return {
       phase: s.gameflow.phase,
       subphase: s.gameflow.subphase,
       turnOrder: [...(s.gameflow.turnOrder ?? [])],
+      fullTurnOrder: [...(s.gameflow.fullTurnOrder ?? [])],
+      startingOptions: copy(s.startingOptions, {}),
       bank: s.bank,
+      bankBroken: s.bankBroken,
+      board: {
+        tiles: copy(s.mapData?.tiles),
+        dimensions: copy(s.mapData?.dimensions),
+        houses: copy(s.houses),
+        gardens: copy(s.gardens),
+        needs: copy(s.needs),
+        campaigns: copy(s.campaigns),
+        freeways: copy(s.freeways),
+        parks: copy(s.parks),
+        newRoads: copy(s.newRoads),
+      },
+      supply: {
+        availableEmployees: copy(s.availableEmployees),
+        availableMilestones: copy(s.availableMilestones),
+        availableMarketingCampaigns: copy(s.availableMarketingCampaigns),
+      },
       players: s.players.map((p) => ({
         name: p.displayName ?? p.name,
         money: p.money,
+        bankrupt: Boolean(p.bankrupt),
         resources: [...(p.resources ?? [])],
         employees: [...(p.employees ?? [])],
         beach: [...(p.beach ?? [])],
         restaurants: (p.restaurants ?? []).map((r) => ({ ...r })),
+        milestones: copy(p.milestones),
+        marketers: copy(p.marketers),
+        coffeeShops: copy(p.coffeeShops),
+        ceoSlots: p.ceoSlots,
       })),
+      history: copy(s.history),
+      chat: copy(s.chatData),
+      untrustedTextFields: ['chat'],
     }
   }
 }

@@ -22,6 +22,11 @@ def redirect_old_url(request, original_id):
 urlpatterns = [
     path("", views.index, name="index"),
     path("agent/manage/", agent_management.manage_agents, name="agent_manage"),
+    path(
+        "agent/manage/<int:identity_id>/token/",
+        agent_management.reveal_token,
+        name="agent_reveal_token",
+    ),
     path("agent/v1/games/", agent_api.list_games, name="agent_list_games"),
     path("agent/v1/whoami/", agent_api.agent_whoami, name="agent_whoami"),
     path("agent/v1/bootstrap/", agent_api.agent_bootstrap, name="agent_bootstrap"),

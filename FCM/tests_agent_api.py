@@ -219,6 +219,9 @@ class FCMAgentAPITestCase(TestCase):
         self.assertEqual(response.json()["error"]["code"], "NOT_A_PLAYER")
 
     def test_snapshot_returns_ordered_player_scoped_contract(self):
+        AgentIdentity.objects.create(
+            owner=self.outsider, actor_user=self.bob, label="Blue Bot",
+        )
         self.client.force_login(self.alice)
         response = self.client.get(
             f"/FCM/agent/v1/games/{self.game.id}/snapshot/",
@@ -229,6 +232,7 @@ class FCMAgentAPITestCase(TestCase):
         self.assertEqual(payload["id"], self.game.id)
         self.assertEqual(payload["latestUpdate"], "123456")
         self.assertEqual(payload["playerNames"], ["agent_alice", "agent_bob"])
+        self.assertEqual(payload["displayNames"], ["agent_alice", "Blue Bot"])
         self.assertEqual(payload["mySeat"], 0)
         self.assertEqual(payload["gameData"], "opaque-blob")
         self.assertEqual(payload["startingMap"], [1, 2, 3])
@@ -552,6 +556,14 @@ class FCMAgentCreateJoinTests(TestCase):
         self.assertEqual(game.creator, self.alice)
         self.assertEqual(game.gameStatus, "WAITING")
         self.assertEqual(game.maxPlayers, 4)
+        self.assertEqual(
+            response.json()["game"]["gameURL"],
+            f"http://testserver/FCM/{game.id}/show/",
+        )
+        self.assertEqual(
+            response.json()["game"]["inviteURL"],
+            f"http://testserver/join/FCM{game.id}/",
+        )
         self.assertEqual(list(game.players.values_list("player__username", flat=True)), [self.alice.username])
         self.assertTrue(game.invitedPlayers.filter(id=self.bob.id).exists())
         self.assertTrue(game.invitedPlayers.filter(id=self.mallory.id).exists())
@@ -676,11 +688,9 @@ class FCMAgentIdentityTokenTests(TestCase):
         self.owner = User.objects.create_user(username="human_owner", password="pw")
         self.other = User.objects.create_user(username="other_owner", password="pw")
 
-    def _create_identity(self, *, label="My Red Bot", scopes=None):
+    def _create_identity(self, *, label="My Red Bot"):
         self.client.force_login(self.owner)
         body = {"label": label}
-        if scopes is not None:
-            body["scopes"] = scopes
         return self.client.post(
             "/FCM/agent/v1/identities/",
             data=json.dumps(body),
@@ -696,7 +706,12 @@ class FCMAgentIdentityTokenTests(TestCase):
         self.assertEqual(identity.owner, self.owner)
         self.assertFalse(identity.actor_user.has_usable_password())
         self.assertNotIn("secretHash", json.dumps(payload))
-        self.assertEqual(identity.credentials.get().scopes, ["fcm:play", "fcm:read"])
+        credential = identity.credentials.get()
+        self.assertEqual(
+            credential.scopes,
+            ["fcm:games:create", "fcm:play", "fcm:read"],
+        )
+        self.assertIsNone(credential.expires_at)
 
     def test_bootstrap_requires_an_agent_token_not_an_owner_session(self):
         anonymous = self.client.get("/FCM/agent/v1/bootstrap/")
@@ -710,12 +725,14 @@ class FCMAgentIdentityTokenTests(TestCase):
         self.assertEqual(owner_session.json()["error"]["code"], "AGENT_TOKEN_REQUIRED")
 
     def test_bootstrap_rejects_a_token_that_cannot_complete_the_play_workflow(self):
-        created = self._create_identity(scopes=["fcm:read"]).json()
+        created = self._create_identity().json()
+        identity = AgentIdentity.objects.get(id=created["identity"]["id"])
+        _credential, read_only_token = issue_agent_token(identity, scopes=["fcm:read"])
         self.client.logout()
 
         response = self.client.get(
             "/FCM/agent/v1/bootstrap/",
-            HTTP_AUTHORIZATION=f"Bearer {created['token']}",
+            HTTP_AUTHORIZATION=f"Bearer {read_only_token}",
         )
 
         self.assertEqual(response.status_code, 403)
@@ -744,8 +761,13 @@ class FCMAgentIdentityTokenTests(TestCase):
         self.assertNotIn(token, rendered)
         self.assertIn("Never invent an action", rendered)
 
-    def test_empty_scope_list_is_rejected_instead_of_granting_every_scope(self):
-        response = self._create_identity(scopes=[])
+    def test_identity_creation_rejects_permission_fields_from_the_public_contract(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            "/FCM/agent/v1/identities/",
+            data=json.dumps({"label": "No Scope UI", "scopes": []}),
+            content_type="application/json",
+        )
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "INVALID_ARGUMENTS")
@@ -778,9 +800,11 @@ class FCMAgentIdentityTokenTests(TestCase):
         self.assertEqual(whoami.json()["identity"]["ownerUsername"], self.owner.username)
 
     def test_read_only_pat_cannot_create_or_join_games(self):
-        created = self._create_identity(scopes=["fcm:read"]).json()
+        created = self._create_identity().json()
+        identity = AgentIdentity.objects.get(id=created["identity"]["id"])
+        _credential, read_only_token = issue_agent_token(identity, scopes=["fcm:read"])
         self.client.logout()
-        headers = {"HTTP_AUTHORIZATION": f"Bearer {created['token']}"}
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {read_only_token}"}
         response = self.client.post(
             "/FCM/agent/v1/games/",
             data=json.dumps({"gameName": "forbidden"}),
@@ -825,6 +849,46 @@ class FCMAgentIdentityTokenTests(TestCase):
         self.assertEqual(first.json()["username"], restarted.json()["username"])
         self.assertNotIn("sessionid", first_process.cookies)
         self.assertNotIn("sessionid", second_process.cookies)
+
+    def test_refresh_keeps_agent_identity_and_replaces_its_only_token(self):
+        created = self._create_identity(label="Persistent Bot").json()
+        identity = AgentIdentity.objects.get(id=created["identity"]["id"])
+        actor_id = identity.actor_user_id
+        old_token = created["token"]
+
+        response = self.client.post(
+            f"/FCM/agent/v1/identities/{identity.id}/tokens/",
+            data="{}",
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(identity.credentials.count(), 1)
+        self.assertNotEqual(response.json()["token"], old_token)
+        identity.refresh_from_db()
+        self.assertEqual(identity.actor_user_id, actor_id)
+        self.client.logout()
+        self.assertEqual(
+            self.client.get(
+                "/FCM/agent/v1/whoami/",
+                HTTP_AUTHORIZATION=f"Bearer {old_token}",
+            ).status_code,
+            401,
+        )
+        self.assertEqual(
+            self.client.get(
+                "/FCM/agent/v1/whoami/",
+                HTTP_AUTHORIZATION=f"Bearer {response.json()['token']}",
+            ).status_code,
+            200,
+        )
+
+    def test_two_named_agents_have_distinct_accounts_and_tokens(self):
+        first = self._create_identity(label="Red Bot").json()
+        second = self._create_identity(label="Blue Bot").json()
+        self.assertNotEqual(first["identity"]["actorUsername"], second["identity"]["actorUsername"])
+        self.assertNotEqual(first["token"], second["token"])
+        self.assertEqual(AgentIdentity.objects.filter(owner=self.owner).count(), 2)
+        self.assertEqual(AgentCredential.objects.filter(identity__owner=self.owner).count(), 2)
 
     def test_expired_pat_and_disabled_identity_are_rejected(self):
         created = self._create_identity().json()

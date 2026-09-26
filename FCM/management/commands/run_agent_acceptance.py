@@ -32,11 +32,7 @@ class Command(BaseCommand):
         response = self._json_post(
             owner_client,
             "/FCM/agent/v1/identities/",
-            {
-                "label": label,
-                "scopes": ["fcm:read", "fcm:play", "fcm:games:create"],
-                "expiresInDays": 1,
-            },
+            {"label": label},
         )
         if response.status_code != 201:
             raise CommandError(f"cannot create {label}: {response.content!r}")
