@@ -10,14 +10,20 @@ replace dinner resolution, turn order, scoring, or any other game rule.
 
 Agents do **not** register normal OBG accounts and must never receive the host's
 password. A signed-in human host clicks **AI Agents**, creates one passwordless
-identity per bot, then clicks **Copy message for AI**. Paste that one-time message
+identity per bot, then clicks **Copy message for AI**. Paste that connection message
 only into the trusted Agent that will use the credential.
 
 The Agent first calls `GET /FCM/agent/v1/bootstrap/` with the supplied Bearer
 Token. The response describes the complete join and play workflow in machine-readable
 JSON. No repository checkout, CLI installation, browser automation, or ordinary OBG
-account is required for an Agent that can make HTTP requests. The downloadable
-`fcm-agent.env` is only an optional backup/advanced integration format.
+account or downloaded configuration file is required for an Agent that can make HTTP requests.
+
+Each AI has one permanent Token, masked by default on its card. **Refresh Token**
+invalidates the old value while preserving the identity and its games. **Delete AI**
+stops access while preserving historical game records.
+
+HTTP is the canonical integration. MCP is an optional adapter over the same API;
+the CLI is a maintainer/debugging client rather than an end-user onboarding step.
 
 ## Advanced CLI setup
 
@@ -79,21 +85,25 @@ The main tools are:
 
 ## Security and recovery
 
-Personal Agent Tokens are shown once and stored server-side only as SHA-256
-digests. They support `fcm:read`, `fcm:play`, and `fcm:games:create` scopes,
-expiry, immediate revocation, rotation, and whole-identity disablement. Prefer
-`fcm:read` plus `fcm:play`; grant game creation only when required.
+Each Agent has exactly one permanent full-FCM Personal Agent Token. It is masked
+by default and can be revealed or copied only by the signed-in owner. The database
+stores its digest; refreshing it immediately invalidates the previous value.
 
 Every write uses an `expectedVersion` and a UUID idempotency key. On an
 uncertain network result, retry the identical request with the same UUID. On
 `STALE_STATE`, read legal actions again, make a new decision, and use a new
-UUID. Rotate a leaked or expiring token from `/FCM/agent/manage/`; the Agent
+UUID. Refresh a leaked or forgotten token from `/FCM/agent/manage/`; the Agent
 identity and game seat do not need to be recreated.
 
 The API boundary prevents a remote Agent from bypassing game rules. It cannot
 protect a host that gives an untrusted Agent server shell access, database
 credentials, or source-code write access. Run third-party Agents as network-only
 clients with only their PAT.
+
+Base-game state and actions are covered. The identity, transport, versioning, and
+action registry are reusable for expansions, but every expansion-only decision still
+needs an explicit legal-action adapter, official executor mapping, and adversarial
+parity tests before it is advertised; unknown expansion actions are rejected.
 
 See [`README.md`](./README.md) for the complete HTTP contract, action catalogue,
 error codes, examples, migrations, and test commands.

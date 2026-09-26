@@ -1,8 +1,8 @@
 # OBG / FCM Agent Integration Specification
 
-Status: implementation and acceptance complete; ready for maintainer review
-Version: 4
-Updated: 2026-09-25
+Status: base-game implementation and acceptance complete; final clean commit/push in progress
+Version: 5
+Updated: 2026-09-27
 Scope: base-game FCM, 2–6 independent seats, human/Agent mixed games and all-Agent games
 
 ## 1. Product goal
@@ -23,7 +23,7 @@ Agent implementation
       │ HTTP / CLI / stdio MCP (high-level actions only)
       ▼
 Django Agent API
-      │ identity · scope · membership · version · idempotency
+      │ identity · membership · version · idempotency
       ▼
 isolated Node worker
       │ loads the repository's existing FCM JavaScript
@@ -45,25 +45,22 @@ The MCP server and CLI are thin transports. They do not own a second rules imple
 - A human OBG account owns zero or more `AgentIdentity` records.
 - Each identity has a passwordless OBG user that occupies one ordinary player seat.
 - Each AI must use its own identity and Token; credentials are not shared between seats.
-- A Personal Agent Token is displayed once and only its SHA-256 digest is stored.
-- Tokens have explicit scopes, expiry, last-use metadata and immediate revocation.
-- Disabling an identity deactivates its seat user and revokes all credentials.
+- Each identity has exactly one permanent Personal Agent Token with full FCM access.
+- The owner page masks the Token by default, but can reveal or copy the full value after a
+  same-origin authenticated request. The database stores only its digest.
+- Refresh replaces the sole Token immediately while preserving the same identity, seat and games.
+- Delete removes the Token and deactivates the identity while preserving historical game records.
 
-Human owners use `/FCM/agent/manage/` to create, rotate and revoke credentials. Immediately after
-creation the page produces one self-contained message that can be pasted into a trusted Agent.
+Human owners use `/FCM/agent/manage/` to create, refresh and delete AI players. Each collapsible
+card shows that AI's masked Token and current games. **Copy message for AI** produces one
+self-contained message that can be pasted into a trusted Agent.
 The Agent authenticates to `GET /FCM/agent/v1/bootstrap/`, which returns the machine-readable join
-and play workflow. A downloadable `fcm-agent.env` remains an optional advanced/backup path rather
-than the primary onboarding flow. Agents do not register normal accounts and never receive the
-owner's password.
-
-Current scopes:
-
-- `fcm:read`
-- `fcm:play`
-- `fcm:games:create`
+and play workflow. Agents do not register normal accounts, download configuration files or receive
+the owner's password.
 
 OAuth Authorization Code + PKCE is intentionally deferred until public remote hosting is in
-scope. Controlled deployments use short-lived, least-privilege PATs over HTTPS.
+scope. Controlled deployments use permanent per-Agent PATs over HTTPS; owners refresh a Token when
+it is forgotten or suspected to be exposed.
 
 ## 4. Canonical API
 
@@ -86,6 +83,12 @@ a different command is rejected. A stale version never mutates the game.
 Every successful write records the internal actor, game, action, before/after version, command
 hash, ruleset hash, duration and outcome. Tokens, cookies, full blobs and Agent reasoning are not
 logged.
+
+`GET /games/{id}/actions/` is the canonical decision view. For the base game it includes the board,
+houses, gardens, demands, campaigns, roads, public supply, player money/resources/employees/beach,
+restaurants, milestones, turn order, bank, history and chat, plus the caller's legal actions. Chat
+and other player-authored text are explicitly untrusted. Other players' simultaneous temporary
+choices and reserve-card selections are not exposed before the normal rules reveal them.
 
 ## 5. Rule preservation
 
@@ -128,16 +131,18 @@ Required before merging:
 
 1. Node contract, adversarial, concurrency, schema, worker and snapshot tests pass.
 2. Django authentication, scope, ownership, membership, idempotency and atomic-commit tests pass.
-3. Token management UI tests prove one-time display and cross-owner isolation.
+3. Token management UI tests prove masking/reveal, one-Token identity, refresh invalidation,
+   persistence of game memberships and cross-owner isolation.
 4. Vue production build and Django migration checks pass.
 5. A fresh base-game acceptance run completes with one human Session and at least two PAT Agents.
 6. Search and diff review show no optional-module code, generated bundles, secrets or local probes.
 7. The full project suite introduces no failures beyond failures reproducible on the current
    upstream base; any upstream failures are reported rather than hidden or changed in this PR.
 
-Latest clean-base acceptance evidence: upstream `d8b2682`, fresh isolated SQLite database, one
-human Session plus two independent PAT Agents, Game Over at turn 15 after 278 audited commands.
-The full Django suite ran 213 tests; the only two failures are unchanged upstream defects in
+Latest post-migration acceptance evidence: fresh isolated SQLite database, one human Session plus
+two independent permanent-Token Agents, Game Over at turn 16 after 293 audited commands. The
+previous clean-base run on upstream `d8b2682` also reached Game Over at turn 15 after 278 commands.
+The full Django suite ran 220 tests; the only two failures are unchanged upstream defects in
 `Lobby.tests` (missing imported helper) and the explicitly named RNB `test_F_FAILING_...` test.
 
 ## 9. Explicitly excluded from this change
@@ -146,7 +151,8 @@ The full Django suite ran 213 tests; the only two failures are unchanged upstrea
 - unrelated UI, LAN, notification, replay or historical-game fixes;
 - generated Vue bundles and one-off diagnostic scripts;
 - the existing built-in 1v1 FCM AI;
-- public OAuth, Remote MCP, application registration and public hosting operations.
+- public OAuth, Remote MCP, application registration and public hosting operations;
+- expansion-specific Agent decisions beyond the base-game action registry.
 
 The Temporary Worker module remains in the owner's original working tree and offline recovery
 archive. It must be maintained on a separate private branch or fork and rebased independently.
@@ -155,10 +161,50 @@ archive. It must be maintained on a separate private branch or fork and rebased 
 
 Not required for the first controlled-network PAT contribution:
 
-- UI/headless serialized-state parity fixtures for every base-game phase;
+- UI/headless serialized-state parity fixtures for every expansion phase;
 - an explicit game allowlist and configurable rate limiting;
 - 100-write load tests and operational metrics;
 - HTTPS deployment guide and security review;
 - mature-library OAuth Authorization Code + PKCE and refresh-token rotation;
 - Remote MCP built as another thin client of the canonical HTTP API;
-- optional expansions, each gated by its own parity fixtures.
+- optional expansions through the same action registry. Shared identity, state, transport,
+  versioning and validation infrastructure is reused; each expansion-only decision must add an
+  explicit legal-action adapter, executor mapping and adversarial parity fixtures before it can be
+  advertised. Unknown expansion actions remain rejected by default.
+
+## 11. Product checklist and remaining work
+
+This checklist is the product acceptance source of truth. “Implemented” still requires the
+verification gates in section 8 before release.
+
+| Requirement | Current design / implementation | Status |
+|---|---|---|
+| Simple owner page | The page lists only AI players owned by the signed-in human. Installation commands, downloads, expiry, permission, revoke and disable controls are absent. | Implemented; live browser smoke passed |
+| One card per AI | Each custom-named AI appears as one collapsible card. Internal usernames are not shown to normal users. | Implemented |
+| Current games | An expanded card lists that AI's non-finished FCM games; each title links to `/FCM/{id}/show/`. | Implemented |
+| Exactly one permanent Token | A database constraint permits one credential per identity. New Tokens have no expiry and full FCM capability. | Implemented and migration added |
+| Mask, reveal and copy | The page shows the beginning/end only. Eye reveal and Copy Token fetch the full value through an owner-only, non-cacheable endpoint. Copy works without first revealing it. | Implemented; live reveal/copy smoke passed |
+| Refresh forgotten Token | Refresh atomically replaces the sole Token. The old value stops working; identity, player account, game memberships and history remain unchanged. | Implemented and adversarially tested |
+| Delete terminology | The UI says Delete AI, not revoke/disable. Internally it is a soft deletion so old game records keep a valid player reference; the Token is removed and login is deactivated. | Implemented |
+| No permission UI | Owners do not choose scopes. Newly created/refreshed Tokens receive all FCM API capabilities. Legacy scope checks remain only as server-side compatibility defense. | Implemented |
+| Separate Agents | Every AI has a distinct passwordless OBG actor, identity, Token and seat. A Token can act only for its own memberships. | Implemented and tested |
+| Create-game handoff | Game creation returns both `gameURL` and `inviteURL`; bootstrap explicitly tells the Agent to return `inviteURL` to the requesting human. | Implemented and tested |
+| Friendly names | Human UI, structured Agent state and FCM history resolve internal Agent usernames to the owner's custom label. Engine commits translate presentation labels back to stable internal actors before validation. | Implemented and covered by runtime regression test |
+| Read decision information | Base-game state exposes the visible board, demands, public supply, bank/order, public player assets, history/chat and a rules catalog. Private temporary simultaneous choices are deliberately excluded. | Implemented; phase-by-phase parity fixture remains TODO |
+| Perform human operations | Base-game choices are exposed only through the action registry and are executed through existing FCM controller/rules functions. Automatic dinner/scoring phases are not rewritten. | Implemented; fresh mixed-game run reached Game Over after 293 commands |
+| Expansion support | Authentication, transport, state envelope and registry are reusable. Expansion-only decisions are rejected unless they have their own legal-action adapter, executor and adversarial tests. | TODO after base-game release |
+| Connection method clarity | HTTP JSON API is canonical. The HTML page is only the human owner's control panel. MCP is an optional tool adapter; CLI is a maintainer/debug reference client. | Documented |
+| DeepSeek changes | The only unrelated detected change is local host configuration in `OnlineBoardGamers/settings.py`. It does not change FCM rules or Agent behavior and is intentionally excluded from the Agent commit. | Reviewed; preserve locally, do not submit |
+
+### Remaining release tasks
+
+1. Re-run Node, targeted Django, migration/build checks and compare full-suite failures with upstream.
+2. Review the final diff to exclude Temporary Worker code, local host settings, secrets and
+   unrelated generated assets.
+3. Commit and push the clean Agent-only change to the owner's fork.
+
+### Deferred expansion work
+
+For each optional module, inventory its extra phases, visible state and human controls; then add
+registry actions, legal candidates, official controller execution, serialization/resume tests and
+forged-input tests. Do not advertise a module until an equivalent human/Agent phase fixture passes.

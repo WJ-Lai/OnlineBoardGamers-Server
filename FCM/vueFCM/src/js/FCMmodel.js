@@ -303,6 +303,13 @@ export async function initGame() {
 		}
 	}
 
+	// External Agent accounts use internal unique usernames for authentication,
+	// but every human-facing surface (including history) shows the owner's label.
+	const agentDisplayNames = window.initData.agentDisplayNames || {}
+	for (const player of store.players) {
+		if (agentDisplayNames[player.name]) player.displayName = agentDisplayNames[player.name]
+	}
+
 	// start WS
 	if (window.initData.pov >= -9) {
 		WS.StartWebSocket().catch(() => {

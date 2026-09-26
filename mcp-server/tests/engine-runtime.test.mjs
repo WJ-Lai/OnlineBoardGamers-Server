@@ -116,3 +116,37 @@ test('executeBatch applies a subphase transaction and returns a canonical save',
   assert.equal(result.state.version, '44')
   assert.deepEqual(result.actions, [{ type: 'hire', employee: 2 }, { type: 'next_subphase' }])
 })
+
+test('executeBatch converts presentation labels back to authenticated player names', async () => {
+  const adapter = {
+    async loadSnapshot() {},
+    async doAction() { return { ok: true } },
+    async endTurn() {},
+    exportBlob() { return 'canonical-blob' },
+    getState() {
+      return {
+        phase: 5, turn: 2, turnOrder: [1, 0],
+        players: [{ name: 'Human' }, { name: 'Red Bot' }],
+      }
+    },
+    getLegalActions() { return { yourTurn: true, isSimulPhase: false, actions: [] } },
+  }
+  const runtime = new EngineRuntime({
+    createAdapter: () => adapter,
+    metadata: async () => ({ protocolVersion: 'test-v1', rulesetHash: 'c'.repeat(64) }),
+  })
+  const snapshot = {
+    ...validSnapshot(),
+    displayNames: ['Human', 'Red Bot'],
+  }
+
+  const result = await runtime.executeBatch({
+    snapshot,
+    actor: { name: 'agent', seat: 1 },
+    expectedVersion: '44',
+    actions: [{ type: 'next_subphase' }],
+  })
+
+  assert.deepEqual(result.canonicalSave.nextPlayer, ['agent'])
+  assert.equal(result.state.players[1].name, 'Red Bot')
+})

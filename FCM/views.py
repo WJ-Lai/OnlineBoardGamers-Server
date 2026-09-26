@@ -33,6 +33,7 @@ from Lobby.sharedFunctions.sharedRefs import SR_getFCMstartingOptionsHTML
 
 from . import FCMconstants as rfFCM
 from .common import create_fcm_game
+from .models import AgentIdentity
 
 if TYPE_CHECKING:
     from Lobby.presenters import FCMpresenter
@@ -41,6 +42,14 @@ FCMsuperUsers = ["BotKickStarter"]
 USE_NEW_CODE = False
 
 logger = logging.getLogger(__name__)
+
+
+def _agent_display_names(player_names):
+    return dict(
+        AgentIdentity.objects.filter(
+            actor_user__username__in=player_names,
+        ).values_list("actor_user__username", "label")
+    )
 
 # This wrapper is a bit pointless.
 # BUT it does handily keep the loggin in one wrapper!
@@ -341,6 +350,7 @@ def showGame(request, game_id):
             "startingOptionsHTML": startingOptionsHTML,
             "statsExcludedGame": statsExcludedGame,
             "displayNames": displayNames,
+            "agentDisplayNames": json.dumps(_agent_display_names(allPlayerListBySeat)),
             "nextURL": nextURL,
             "KickoutFlexiDataArray": result["base_data"]["KickoutFlexiDataArray"],
             "USE_NEW_CODE": USE_NEW_CODE,
@@ -535,6 +545,7 @@ def showGameVue(request, game_id):
             "startingOptionsHTML": startingOptionsHTML,
             "statsExcludedGame": statsExcludedGame,
             "displayNames": displayNames,
+            "agentDisplayNames": json.dumps(_agent_display_names(allPlayerListBySeat)),
             "nextURL": nextURL,
             "KickoutFlexiDataArray": result["base_data"]["KickoutFlexiDataArray"],
             "USE_NEW_CODE": USE_NEW_CODE,

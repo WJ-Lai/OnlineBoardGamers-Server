@@ -50,6 +50,14 @@ class AgentCredential(models.Model):
             and self.identity.is_active
         )
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("identity",),
+                name="fcm_one_credential_per_agent",
+            ),
+        ]
+
 
 class AgentActionReceipt(models.Model):
     """Durable receipt for an Agent write sent through the legacy FCM endpoint."""
