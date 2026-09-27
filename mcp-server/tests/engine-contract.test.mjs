@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  BUILTIN_AI_POLICY_VERSION,
   ENGINE_PROTOCOL_VERSION,
+  buildBuiltinAIMetadata,
   buildEngineMetadata,
   normalizeEngineSnapshot,
   seededRandom,
@@ -17,6 +19,17 @@ test('engine metadata is versioned and fingerprints the authoritative FCM source
   assert.equal(first.rulesetHash, second.rulesetHash)
   assert.ok(first.rulesetFiles.includes('src/js/FCMrules.js'))
   assert.ok(first.rulesetFiles.includes('src/js/FCMcontroller.js'))
+})
+
+test('built-in benchmark policy has a separate reproducible fingerprint', async () => {
+  const first = await buildBuiltinAIMetadata()
+  const second = await buildBuiltinAIMetadata()
+
+  assert.equal(first.policyVersion, BUILTIN_AI_POLICY_VERSION)
+  assert.match(first.policyHash, /^[0-9a-f]{64}$/)
+  assert.equal(first.policyHash, second.policyHash)
+  assert.deepEqual(first.policyFiles, ['src/js/FCM_AI.js'])
+  assert.equal('rulesetHash' in first, false)
 })
 
 test('fresh-game random source is deterministic per server seed', () => {

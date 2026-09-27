@@ -132,3 +132,36 @@ test('seed reset produces deterministic official state and can take the first le
   assert.notEqual(transition.after.gameData, '')
   assert.equal(transition.after.latestUpdate, '1')
 })
+
+test('offline environment advances the official built-in seat through its dedicated adapter', async () => {
+  const calls = []
+  const runtime = {
+    async executeBuiltinAI(command) {
+      calls.push(structuredClone(command))
+      return {
+        canonicalSave: {
+          gameData: 'after-builtin', phase: 3, turn: 1,
+          nextPlayer: ['human'], status: 'ACTIVE',
+        },
+        simultaneousSubmission: null,
+      }
+    },
+  }
+  const env = new OfflineEnvironment({
+    runtime,
+    snapshot: {
+      ...snapshot(), playerNames: ['human', 'FcmAI'], currentPlayers: ['FcmAI'],
+    },
+  })
+
+  const transition = await env.stepBuiltinAI(1, 'policy:9')
+
+  assert.equal(calls[0].actor.name, 'FcmAI')
+  assert.equal(calls[0].policySeed, 'policy:9')
+  assert.equal(transition.after.gameData, 'after-builtin')
+  assert.deepEqual(transition.after.currentPlayers, ['human'])
+  await assert.rejects(
+    () => env.stepBuiltinAI(0, 'forged'),
+    (error) => error.code === 'INVALID_OFFLINE_ENVIRONMENT',
+  )
+})

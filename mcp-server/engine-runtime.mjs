@@ -1,4 +1,9 @@
-import { buildEngineMetadata, normalizeEngineSnapshot, seededRandom } from './engine-contract.mjs'
+import {
+  buildBuiltinAIMetadata,
+  buildEngineMetadata,
+  normalizeEngineSnapshot,
+  seededRandom,
+} from './engine-contract.mjs'
 import { FCMAdapter } from './fcm-adapter.mjs'
 import {
   actionFinishesTurn,
@@ -102,13 +107,68 @@ async function loadDeterministicSnapshot(adapter, snapshot, actor) {
   }
 }
 
+async function finalizeExecution({ metadata, snapshot, transportContext, adapter, transport, actions, seat }) {
+  const state = adapter.getState()
+  const legalActions = adapter.getLegalActions(seat)
+  state.version = String(transportContext.nextVersion ?? snapshot.latestUpdate)
+  const turnOrder = state.turnOrder ?? []
+  const nextSeatIndexes = legalActions.isSimulPhase ? turnOrder : turnOrder.slice(0, 1)
+  const syntheticSave = {
+    action: 'saveNormal',
+    gameID: snapshot.id,
+    gameData: adapter.exportBlob(false),
+    phase: state.phase,
+    turn: state.turn,
+    nextPlayer: nextSeatIndexes.map(
+      (index) => state.players?.[index]?.name,
+    ).filter(Boolean),
+  }
+  const capturedSave = transport.canonicalSave ?? (
+    transport.simultaneousSubmission ? null : syntheticSave
+  )
+  if (
+    transport.simultaneousSubmission
+    && transport.simultaneousSubmission.playersToMove.length === 0
+    && capturedSave == null
+  ) {
+    throw codedError(
+      'ENGINE_TRANSITION_FAILED',
+      'the final simultaneous submission did not produce a canonical save',
+    )
+  }
+  const displayToActor = new Map(
+    (snapshot.displayNames ?? snapshot.playerNames).map(
+      (displayName, index) => [displayName, snapshot.playerNames[index]],
+    ),
+  )
+  const canonicalSave = capturedSave == null ? null : {
+    ...capturedSave,
+    nextPlayer: (capturedSave.nextPlayer ?? []).map(
+      (name) => displayToActor.get(name) ?? name,
+    ),
+  }
+  return {
+    ...(await metadata()),
+    gameID: snapshot.id,
+    beforeVersion: snapshot.latestUpdate,
+    actions,
+    canonicalSave,
+    simultaneousSubmission: transport.simultaneousSubmission,
+    transportRequests: transport.requests,
+    state,
+    legalActions,
+  }
+}
+
 export class EngineRuntime {
   constructor({
     createAdapter = () => new FCMAdapter({ username: null, jar: null }),
     metadata = buildEngineMetadata,
+    builtinAIMetadata = buildBuiltinAIMetadata,
   } = {}) {
     this.createAdapter = createAdapter
     this.metadata = metadata
+    this.builtinAIMetadata = builtinAIMetadata
   }
 
   async inspect(command) {
@@ -198,6 +258,7 @@ export class EngineRuntime {
       transportContext,
       new Set([
         'existingMoves', 'pendingPlayerNames', 'acceptedPhases', 'nextVersion', 'sideData',
+        'disableBuiltinAIAuto',
       ]),
       'transportContext',
     )
@@ -210,7 +271,9 @@ export class EngineRuntime {
       sideData: transportContext.sideData ?? '',
     })
     const previousTransport = globalThis.__fcmLocalTransport
+    const previousBuiltinAIAuto = globalThis.__fcmDisableBuiltinAIAuto
     globalThis.__fcmLocalTransport = transport.fetch
+    globalThis.__fcmDisableBuiltinAIAuto = Boolean(transportContext.disableBuiltinAIAuto)
     try {
       for (const [index, action] of command.actions.entries()) {
         if (action.type === 'end_turn') {
@@ -231,60 +294,72 @@ export class EngineRuntime {
       }
     } finally {
       globalThis.__fcmLocalTransport = previousTransport
+      globalThis.__fcmDisableBuiltinAIAuto = previousBuiltinAIAuto
     }
 
-    const state = adapter.getState()
-    const legalActions = adapter.getLegalActions(seat)
-    state.version = String(transportContext.nextVersion ?? snapshot.latestUpdate)
-    const turnOrder = state.turnOrder ?? []
-    const nextSeatIndexes = legalActions.isSimulPhase ? turnOrder : turnOrder.slice(0, 1)
-    const syntheticSave = {
-      action: 'saveNormal',
-      gameID: snapshot.id,
-      gameData: adapter.exportBlob(false),
-      phase: state.phase,
-      turn: state.turn,
-      nextPlayer: nextSeatIndexes.map(
-        (index) => state.players?.[index]?.name,
-      ).filter(Boolean),
-    }
-    const capturedSave = transport.canonicalSave ?? (
-      transport.simultaneousSubmission ? null : syntheticSave
+    return finalizeExecution({
+      metadata: this.metadata, snapshot, transportContext, adapter, transport,
+      actions: command.actions, seat,
+    })
+  }
+
+  /** Run the legacy official FcmAI controller as a reproducible offline benchmark policy. */
+  async executeBuiltinAI(command) {
+    exactKeys(
+      command,
+      new Set(['snapshot', 'actor', 'expectedVersion', 'policySeed', 'transportContext']),
+      'engine command',
     )
-    if (
-      transport.simultaneousSubmission
-      && transport.simultaneousSubmission.playersToMove.length === 0
-      && capturedSave == null
-    ) {
-      throw codedError(
-        'ENGINE_TRANSITION_FAILED',
-        'the final simultaneous submission did not produce a canonical save',
-      )
+    exactKeys(command.actor, new Set(['name', 'seat']), 'actor')
+    const snapshot = normalizeEngineSnapshot(command.snapshot)
+    if (String(command.expectedVersion) !== snapshot.latestUpdate) {
+      throw codedError('STALE_STATE', 'expectedVersion does not match the server snapshot')
     }
-    // The legacy FCM controller emits displayName values in nextPlayer. Agent labels
-    // are presentation-only; convert them back to stable internal account names
-    // before Django validates membership and commits the turn.
-    const displayToActor = new Map(
-      (snapshot.displayNames ?? snapshot.playerNames).map(
-        (displayName, index) => [displayName, snapshot.playerNames[index]],
-      ),
+    const { name, seat } = command.actor
+    if (!Number.isInteger(seat) || seat < 0 || name !== 'FcmAI' || snapshot.playerNames[seat] !== 'FcmAI') {
+      throw codedError('BUILTIN_AI_ONLY', 'the built-in policy may act only for the FcmAI seat')
+    }
+    if (snapshot.startingOptions.length > 0) {
+      throw codedError('UNSUPPORTED_RULESET', 'the built-in benchmark currently supports the base game only')
+    }
+    if (command.policySeed == null) throw invalidCommand('policySeed is required')
+
+    const transportContext = command.transportContext ?? {}
+    exactKeys(
+      transportContext,
+      new Set(['existingMoves', 'pendingPlayerNames', 'acceptedPhases', 'nextVersion', 'sideData']),
+      'transportContext',
     )
-    const canonicalSave = capturedSave == null ? null : {
-      ...capturedSave,
-      nextPlayer: (capturedSave.nextPlayer ?? []).map(
-        (name) => displayToActor.get(name) ?? name,
-      ),
+    const adapter = this.createAdapter()
+    await loadDeterministicSnapshot(adapter, snapshot, { actorName: name, actorSeat: seat })
+    const transport = new AuthoritativeTransport({
+      actorName: name,
+      existingMoves: transportContext.existingMoves ?? [],
+      pendingPlayerNames: transportContext.pendingPlayerNames ?? [],
+      acceptedPhases: transportContext.acceptedPhases ?? [],
+      nextVersion: transportContext.nextVersion ?? snapshot.latestUpdate,
+      sideData: transportContext.sideData ?? '',
+    })
+    const previousTransport = globalThis.__fcmLocalTransport
+    const previousBuiltinAIAuto = globalThis.__fcmDisableBuiltinAIAuto
+    const originalRandom = Math.random
+    globalThis.__fcmLocalTransport = transport.fetch
+    globalThis.__fcmDisableBuiltinAIAuto = true
+    Math.random = seededRandom(command.policySeed)
+    try {
+      await adapter.modules.ai.makeAImove()
+    } finally {
+      Math.random = originalRandom
+      globalThis.__fcmDisableBuiltinAIAuto = previousBuiltinAIAuto
+      globalThis.__fcmLocalTransport = previousTransport
     }
+    const result = await finalizeExecution({
+      metadata: this.metadata, snapshot, transportContext, adapter, transport,
+      actions: [{ type: 'official_builtin_ai' }], seat,
+    })
     return {
-      ...(await this.metadata()),
-      gameID: snapshot.id,
-      beforeVersion: snapshot.latestUpdate,
-      actions: command.actions,
-      canonicalSave,
-      simultaneousSubmission: transport.simultaneousSubmission,
-      transportRequests: transport.requests,
-      state,
-      legalActions,
+      ...result,
+      builtinPolicy: await this.builtinAIMetadata(),
     }
   }
 }

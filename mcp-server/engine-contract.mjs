@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 
 export const ENGINE_PROTOCOL_VERSION = 'fcm-engine-v1'
+export const BUILTIN_AI_POLICY_VERSION = 'official-builtin-v1'
 
 const VUE_ROOT = new URL('../FCM/vueFCM/', import.meta.url)
 
@@ -15,6 +16,8 @@ export const RULESET_FILES = Object.freeze([
   'src/js/FCMreference.js',
   'src/stores/FCMstore.js',
 ])
+
+export const BUILTIN_AI_POLICY_FILES = Object.freeze(['src/js/FCM_AI.js'])
 
 const SNAPSHOT_FIELDS = new Set([
   'id', 'gameName', 'status', 'turn', 'phase', 'latestUpdate', 'gameData',
@@ -45,17 +48,29 @@ export function seededRandom(seedValue) {
 }
 
 export async function buildEngineMetadata() {
+  return {
+    protocolVersion: ENGINE_PROTOCOL_VERSION,
+    rulesetHash: await fingerprintFiles(RULESET_FILES),
+    rulesetFiles: [...RULESET_FILES],
+  }
+}
+
+async function fingerprintFiles(files) {
   const hash = createHash('sha256')
-  for (const relativePath of RULESET_FILES) {
+  for (const relativePath of files) {
     hash.update(relativePath)
     hash.update('\0')
     hash.update(await readFile(new URL(relativePath, VUE_ROOT)))
     hash.update('\0')
   }
+  return hash.digest('hex')
+}
+
+export async function buildBuiltinAIMetadata() {
   return {
-    protocolVersion: ENGINE_PROTOCOL_VERSION,
-    rulesetHash: hash.digest('hex'),
-    rulesetFiles: [...RULESET_FILES],
+    policyVersion: BUILTIN_AI_POLICY_VERSION,
+    policyHash: await fingerprintFiles(BUILTIN_AI_POLICY_FILES),
+    policyFiles: [...BUILTIN_AI_POLICY_FILES],
   }
 }
 

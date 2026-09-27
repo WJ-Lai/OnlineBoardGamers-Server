@@ -263,8 +263,13 @@ Seeded `safe-first-legal-v1` runs reached Game Over with two and three players; 
 found and closed an inherited simultaneous-phase edge case: seats automatically skipped by the
 official controller during restructuring/payday no longer leave an undecodable empty move, and
 the runtime now fails closed if a final simultaneous submission produces no canonical save.
-Item 3's dinner projection is implemented; the remaining semantic `DecisionView` fields, built-in
-AI adapter and full benchmark league are still open.
+Item 3's dinner projection is implemented. The original state-mutating 1v1 `FcmAI` now has a
+dedicated seeded offline benchmark adapter and a separate source `policyHash`; ordinary external
+Agent steps suppress the browser's implicit auto-run only inside the offline environment, while
+online behavior is unchanged. A two-map/four-game paired-seat smoke league completed 4/4 with zero
+violations and revealed severe seat bias (seat 0 won all four), so a larger paired league remains
+required before comparing policy strength. The remaining semantic `DecisionView` fields and
+privacy-safe human trajectory import are still open.
    PPO is an experiment, not the default architecture; its viability depends on hierarchical
    action masking, stable observations, a well-designed reward and a population of opponents. If
    potential-difference shaping is used, its evaluator must be frozen and held-out calibrated, and

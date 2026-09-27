@@ -287,3 +287,68 @@ test('executeBatch rejects a swallowed final simultaneous-phase failure', async 
     (error) => error.code === 'ENGINE_TRANSITION_FAILED',
   )
 })
+
+test('executeBuiltinAI is seeded, restores Math.random, and is restricted to FcmAI', async () => {
+  const samples = []
+  const originalRandom = Math.random
+  const originalBuiltinAIAuto = globalThis.__fcmDisableBuiltinAIAuto
+  const runtime = new EngineRuntime({
+    createAdapter: () => ({
+      async loadSnapshot() {},
+      modules: {
+        ai: {
+          async makeAImove() {
+            samples.push([Math.random(), Math.random()])
+            await globalThis.__fcmLocalTransport('/FCM/processTurn/', {
+              body: JSON.stringify({
+                action: 'saveNormal', gameData: 'builtin-blob', phase: 3, turn: 2,
+                nextPlayer: ['human'],
+              }),
+            })
+          },
+        },
+      },
+      exportBlob() { return 'synthetic-blob' },
+      getState() {
+        return {
+          phase: 3, turn: 2, turnOrder: [0],
+          players: [{ name: 'human' }, { name: 'FcmAI' }],
+        }
+      },
+      getLegalActions() { return { yourTurn: false, isSimulPhase: true, actions: [] } },
+    }),
+    metadata: async () => ({ protocolVersion: 'test-v1', rulesetHash: 'f'.repeat(64) }),
+    builtinAIMetadata: async () => ({
+      policyVersion: 'official-builtin-test-v1', policyHash: '9'.repeat(64),
+      policyFiles: ['src/js/FCM_AI.js'],
+    }),
+  })
+  const snapshot = { ...validSnapshot(), playerNames: ['human', 'FcmAI'], phase: 2 }
+  const command = {
+    snapshot, actor: { name: 'FcmAI', seat: 1 }, expectedVersion: '44',
+    policySeed: 'builtin:fixed',
+    transportContext: {
+      existingMoves: [['human', [-1], '', []], ['FcmAI', [-1], '', []]],
+      pendingPlayerNames: ['FcmAI'], acceptedPhases: [0, 1, 2],
+      nextVersion: '45', sideData: '',
+    },
+  }
+
+  const first = await runtime.executeBuiltinAI(command)
+  await runtime.executeBuiltinAI(command)
+
+  assert.deepEqual(samples[0], samples[1])
+  assert.equal(Math.random, originalRandom)
+  assert.equal(globalThis.__fcmDisableBuiltinAIAuto, originalBuiltinAIAuto)
+  assert.equal(first.actions[0].type, 'official_builtin_ai')
+  assert.equal(first.builtinPolicy.policyVersion, 'official-builtin-test-v1')
+  assert.equal(first.builtinPolicy.policyHash, '9'.repeat(64))
+  assert.equal(first.canonicalSave.gameData, 'builtin-blob')
+  await assert.rejects(
+    () => runtime.executeBuiltinAI({
+      ...command,
+      actor: { name: 'human', seat: 0 },
+    }),
+    (error) => error.code === 'BUILTIN_AI_ONLY',
+  )
+})

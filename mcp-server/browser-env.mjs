@@ -240,7 +240,7 @@ export function setInitData({
 
 /** 加载 FCM 模块（必须环境就绪后） */
 export async function loadFCMModules() {
-  const [rules, funcs, model, storeMod, reference, player, controller, backendIO, map] =
+  const [rules, funcs, model, storeMod, reference, player, controller, backendIO, map, ai] =
     await Promise.all([
       import(`${VUEFCM}/src/js/FCMrules.js`),
       import(`${VUEFCM}/src/js/FCMfuncs.js`),
@@ -252,9 +252,10 @@ export async function loadFCMModules() {
       // 写操作的落库出口：saveGameNormal → POST /FCM/processTurn/
       import(`${VUEFCM}/src/backend/FCM_IO.js`),
       import(`${VUEFCM}/src/js/FCMmap.js`),
+      import(`${VUEFCM}/src/js/FCM_AI.js`),
     ])
   const personalMod = globalThis.__fcmPersonalMod ?? (await import(`${VUEFCM}/src/stores/FCMpersonal.js`))
-  return { rules, funcs, model, storeMod, reference, player, controller, backendIO, map, personalMod }
+  return { rules, funcs, model, storeMod, reference, player, controller, backendIO, map, ai, personalMod }
 }
 
 /**

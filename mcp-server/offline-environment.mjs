@@ -133,40 +133,68 @@ export class OfflineEnvironment {
           acceptedPhases: acceptedMovePhases(before.phase),
           nextVersion,
           sideData: '',
+          disableBuiltinAIAuto: true,
         },
       })
 
-      if (result.canonicalSave) {
-        const saved = result.canonicalSave
-        this._snapshot = {
-          ...before,
-          gameData: saved.gameData,
-          phase: saved.phase,
-          turn: saved.turn,
-          latestUpdate: nextVersion,
-          currentPlayers: [...(saved.nextPlayer ?? [])],
-          startingMap: saved.mapTiles ?? before.startingMap,
-          status: saved.status ?? before.status,
-          moveData: '',
-        }
-        this._moves = this._snapshot.playerNames.map((name) => [name, [-1], '', []])
-      } else if (result.simultaneousSubmission) {
-        this._moves = clone(result.simultaneousSubmission.moves)
-        this._snapshot = {
-          ...before,
-          latestUpdate: nextVersion,
-          currentPlayers: [...result.simultaneousSubmission.playersToMove],
-          moveData: '',
-        }
-      } else {
-        throw invalidEnvironment('official runtime returned no durable transition')
-      }
-
-      return {
-        before,
-        after: this.snapshot(),
-        engine: result,
-      }
+      return this._applyTransition(before, nextVersion, result)
     })
+  }
+
+  async stepBuiltinAI(seat, policySeed) {
+    return this._executor.run(async () => {
+      const actor = this._actor(seat)
+      if (actor.name !== 'FcmAI') throw invalidEnvironment('stepBuiltinAI requires the FcmAI seat')
+      const before = this.snapshot()
+      const nextVersion = String(BigInt(before.latestUpdate) + 1n)
+      const result = await this.runtime.executeBuiltinAI({
+        snapshot: before,
+        actor,
+        expectedVersion: before.latestUpdate,
+        policySeed,
+        transportContext: {
+          existingMoves: this._moves,
+          pendingPlayerNames: before.currentPlayers ?? [],
+          acceptedPhases: acceptedMovePhases(before.phase),
+          nextVersion,
+          sideData: '',
+        },
+      })
+
+      return this._applyTransition(before, nextVersion, result)
+    })
+  }
+
+  _applyTransition(before, nextVersion, result) {
+    if (result.canonicalSave) {
+      const saved = result.canonicalSave
+      this._snapshot = {
+        ...before,
+        gameData: saved.gameData,
+        phase: saved.phase,
+        turn: saved.turn,
+        latestUpdate: nextVersion,
+        currentPlayers: [...(saved.nextPlayer ?? [])],
+        startingMap: saved.mapTiles ?? before.startingMap,
+        status: saved.status ?? before.status,
+      }
+      this._moves = this._snapshot.playerNames.map((name) => [name, [-1], '', []])
+    } else if (result.simultaneousSubmission) {
+      this._moves = clone(result.simultaneousSubmission.moves)
+      this._snapshot = {
+        ...before,
+        latestUpdate: nextVersion,
+        currentPlayers: [...result.simultaneousSubmission.playersToMove],
+        moveData: '',
+      }
+    } else {
+      throw invalidEnvironment('official runtime returned no durable transition')
+    }
+
+    return {
+      before,
+      after: this.snapshot(),
+      engine: result,
+    }
   }
 }
