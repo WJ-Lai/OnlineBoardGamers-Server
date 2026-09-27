@@ -100,3 +100,99 @@ export function buildEconomicPlayers({ store, rules, player, controller, referen
     }
   })
 }
+
+/**
+ * Describe public milestone races and per-house, current-inventory competition.
+ *
+ * The market view deliberately does not predict a winner. Dinner consumes inventory in house
+ * number order, so only the isolated official projectDinner operation can authoritatively resolve
+ * the whole phase. These features answer the narrower question: "who can serve this demand from
+ * the public position right now?" Every rules-sensitive calculation is delegated to the loaded
+ * official engine.
+ */
+export function buildStrategicThreats({ store, rules, player, model, reference }) {
+  const priorityTiers = official(rules, 'selectNeedsPriority')
+  const adjustDistances = official(rules, 'adjustDistanceForMilestones')
+  const turnOrderPosition = official(rules, 'getPlaceInFullTurnOrderForPlayer')
+  const restaurantRanges = official(model, 'giveRestaurantRangesForHouse')
+  const hasGarden = official(model, 'hasGarden')
+  const hasResources = official(player, 'playerHasResources')
+  const price = official(player, 'playersPrice')
+  const waitresses = official(player, 'numberOfWaitress')
+  const musicians = official(player, 'numberOfMusicians')
+
+  const milestoneIds = [...(store?.availableMilestones ?? [])]
+  const milestoneSet = new Set(milestoneIds)
+  const knownMilestones = new Set(reference?.BASE_GAME_MILESTONES ?? [])
+  for (const id of milestoneIds) knownMilestones.add(id)
+  for (const playerObject of store?.players ?? []) {
+    for (const id of playerObject.milestones ?? []) knownMilestones.add(id)
+  }
+
+  const milestones = [...knownMilestones].sort((a, b) => a - b).map((id) => {
+    const holders = (store?.players ?? [])
+      .map((playerObject, seat) => (playerObject.milestones ?? []).includes(id) ? seat : null)
+      .filter(Number.isInteger)
+    const claimWindowOpen = milestoneSet.has(id)
+    return {
+      id,
+      title: reference?.MILESTONES_STR?.[id]?.title ?? String(id),
+      claimWindowOpen,
+      holders,
+      status: claimWindowOpen
+        ? (holders.length ? 'shared-this-turn' : 'unclaimed')
+        : (holders.length ? 'closed-claimed' : 'closed-unclaimed'),
+      seatsStillEligible: claimWindowOpen
+        ? (store?.players ?? []).map((_, seat) => seat).filter((seat) => !holders.includes(seat))
+        : [],
+    }
+  })
+
+  const houses = [...(store?.needs ?? [])]
+    .sort((a, b) => a.number - b.number)
+    .map((need) => {
+      const advertisedGoods = (need.needs ?? [])
+        .map((entry) => entry?.[0])
+        .filter(Number.isInteger)
+      const ranges = [...restaurantRanges(need.number)]
+      const distances = adjustDistances(ranges, advertisedGoods.length)
+      const tiers = priorityTiers(advertisedGoods, hasGarden(need.number)).map((goods) => {
+        const suppliers = (store?.players ?? []).flatMap((_, seat) => {
+          if (distances[seat] === -99 || !hasResources(seat, goods)) return []
+          return [{
+            seat,
+            price: price(seat),
+            distance: distances[seat],
+            waitresses: waitresses(seat),
+            musicians: musicians(seat),
+            turnOrder: turnOrderPosition(seat),
+          }]
+        })
+        return { goods: [...goods], suppliers }
+      })
+      const activeTierIndex = tiers.findIndex((tier) => tier.suppliers.length > 0)
+      const activeSuppliers = activeTierIndex < 0 ? [] : tiers[activeTierIndex].suppliers
+      return {
+        house: need.number,
+        advertisedGoods,
+        activeTierIndex: activeTierIndex < 0 ? null : activeTierIndex,
+        activeGoods: activeTierIndex < 0 ? [] : [...tiers[activeTierIndex].goods],
+        eligibleSupplierSeats: activeSuppliers.map((supplier) => supplier.seat),
+        contested: activeSuppliers.length > 1,
+        tiers,
+      }
+    })
+
+  return {
+    provenance: {
+      milestones: 'observed-public-official-store',
+      market: 'official-engine-derived-current-inventory-per-house',
+      exactDinnerResolution: 'projectDinner',
+    },
+    milestones,
+    market: {
+      scope: 'independent-per-house-before-sequential-inventory-consumption',
+      houses,
+    },
+  }
+}

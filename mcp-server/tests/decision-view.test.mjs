@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { buildEconomicPlayers } from '../decision-view.mjs'
+import { buildEconomicPlayers, buildStrategicThreats } from '../decision-view.mjs'
 
 
 test('economic view delegates prices, salary, slots and capacities to official functions', () => {
@@ -86,5 +86,103 @@ test('economic view fails closed instead of inventing missing official calculati
       rules: {}, player: {}, controller: {}, reference: { BLANK_EMPLOYEE_SPACE: -1 },
     }),
     (error) => error.code === 'DECISION_VIEW_UNAVAILABLE' && /salary/.test(error.message),
+  )
+})
+
+test('strategic threats expose milestone windows and public house competition via official functions', () => {
+  const calls = []
+  const store = {
+    availableMilestones: [0, 1],
+    players: [
+      { milestones: [0], resources: [4, 4] },
+      { milestones: [], resources: [4] },
+      { milestones: [2], resources: [] },
+    ],
+    needs: [
+      { number: 18, needs: [[4, -1], [4, -1]] },
+      { number: 3, needs: [[3, -1]] },
+    ],
+  }
+  const rules = {
+    selectNeedsPriority(goods, garden) {
+      calls.push(['tiers', goods, garden])
+      return garden && goods.length > 1 ? [goods, goods.slice(0, 1)] : [goods]
+    },
+    adjustDistanceForMilestones(distances, count) {
+      calls.push(['distances', distances, count])
+      return distances.map((distance) => distance === -99 ? distance : distance - 1)
+    },
+    getPlaceInFullTurnOrderForPlayer: (seat) => [2, 0, 1].indexOf(seat),
+  }
+  const model = {
+    giveRestaurantRangesForHouse(house) {
+      calls.push(['ranges', house])
+      return house === 18 ? [3, 2, -99] : [-99, 1, -99]
+    },
+    hasGarden: (house) => house === 18,
+  }
+  const player = {
+    playerHasResources(seat, goods) {
+      calls.push(['stock', seat, goods])
+      const stock = [...store.players[seat].resources]
+      return goods.every((good) => {
+        const index = stock.indexOf(good)
+        if (index < 0) return false
+        stock.splice(index, 1)
+        return true
+      })
+    },
+    playersPrice: (seat) => 10 - seat,
+    numberOfWaitress: (seat) => seat,
+    numberOfMusicians: () => 0,
+  }
+  const reference = {
+    BASE_GAME_MILESTONES: [0, 1, 2],
+    MILESTONES_STR: [{ title: 'Hire 3' }, { title: 'Discard' }, { title: 'Waitress' }],
+  }
+
+  const before = structuredClone(store)
+  const result = buildStrategicThreats({ store, rules, player, model, reference })
+
+  assert.deepEqual(store, before)
+  assert.deepEqual(result.milestones, [
+    {
+      id: 0, title: 'Hire 3', claimWindowOpen: true, holders: [0],
+      status: 'shared-this-turn', seatsStillEligible: [1, 2],
+    },
+    {
+      id: 1, title: 'Discard', claimWindowOpen: true, holders: [],
+      status: 'unclaimed', seatsStillEligible: [0, 1, 2],
+    },
+    {
+      id: 2, title: 'Waitress', claimWindowOpen: false, holders: [2],
+      status: 'closed-claimed', seatsStillEligible: [],
+    },
+  ])
+  assert.deepEqual(result.market.houses[0], {
+    house: 3,
+    advertisedGoods: [3],
+    activeTierIndex: null,
+    activeGoods: [],
+    eligibleSupplierSeats: [],
+    contested: false,
+    tiers: [{ goods: [3], suppliers: [] }],
+  })
+  assert.equal(result.market.houses[1].house, 18)
+  assert.equal(result.market.houses[1].activeTierIndex, 0)
+  assert.deepEqual(result.market.houses[1].eligibleSupplierSeats, [0])
+  assert.equal(result.market.houses[1].contested, false)
+  assert.deepEqual(result.market.houses[1].tiers[1].suppliers.map((item) => item.seat), [0, 1])
+  assert.ok(calls.some((entry) => entry[0] === 'tiers'))
+  assert.ok(calls.some((entry) => entry[0] === 'distances'))
+})
+
+test('strategic threats fail closed when an authoritative market function is absent', () => {
+  assert.throws(
+    () => buildStrategicThreats({
+      store: { players: [], needs: [], availableMilestones: [] },
+      rules: {}, player: {}, model: {}, reference: {},
+    }),
+    (error) => error.code === 'DECISION_VIEW_UNAVAILABLE' && /selectNeedsPriority/.test(error.message),
   )
 })

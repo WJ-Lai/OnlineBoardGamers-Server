@@ -268,7 +268,7 @@ dedicated seeded offline benchmark adapter and a separate source `policyHash`; o
 Agent steps suppress the browser's implicit auto-run only inside the offline environment, while
 online behavior is unchanged. A two-map/four-game paired-seat smoke league completed 4/4 with zero
 violations and revealed severe seat bias (seat 0 won all four), so a larger paired league remains
-required before comparing policy strength. The remaining semantic `DecisionView` work is market
+required before comparing policy strength. The semantic `DecisionView` now includes public market
 competition and milestone threats. The strategy repository now implements the
 human-data import/review trust boundary: one-seat anonymous provenance, explicit consent/license,
 content hashing and three independent approval attestations; hidden choices, beliefs, credentials,
@@ -280,6 +280,13 @@ free slots, salary liabilities, effective price/discount and recruiting, trainin
 marketing and restaurant-building capacity. All 35 base phase fixtures verify the projection is
 present and structurally valid; the adapter fails closed if a required official calculation is
 missing.
+The authoritative state also exposes `decisionSupport.strategicThreats`. Milestone entries
+distinguish unclaimed open, same-turn shared and closed windows directly from the public official
+store. Per-house entries use official demand priority, reachability, milestone-distance, inventory,
+price and tie-break inputs to list current suppliers. This view is deliberately independent per
+house: it neither predicts a winner nor models sequential inventory consumption. Exact dinner
+resolution remains exclusively in the isolated official `projectDinner` operation. Missing
+official functions fail closed, and hidden simultaneous choices are never inspected.
 
 PPO is an experiment, not the default architecture; its viability depends on hierarchical
    action masking, stable observations, a well-designed reward and a population of opponents. If

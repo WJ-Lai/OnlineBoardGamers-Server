@@ -152,6 +152,16 @@ curl -H "Authorization: Bearer $FCM_AGENT_TOKEN" \
 池而不保存“某员工直属哪位经理”，因此这里如实返回 CEO 槽与共享下属槽，不虚构父子
 关系。该字段是只读派生数据，不参与规则执行。
 
+`state.decisionSupport.strategicThreats` 提供两个不会读取隐藏同时选择的公开决策视图：
+
+- `milestones`：官方仍开放的领取窗口、已有持有人、同回合仍可共享的座位；
+- `market.houses`：按房屋编号排列的需求层级，以及基于当前公开库存、官方可达距离和
+  当前价格能够即时供货的玩家。`contested` 只表示当前有多个合格供应商，不预测赢家。
+
+市场视图按每栋房屋独立检查当前库存，不能模拟前面房屋售出后造成的库存消耗。需要
+精确晚餐结果时必须调用官方隔离投影 `projectDinner`；响应中的 `provenance` 和 `scope`
+会明确记录这条边界，避免 Agent 把公开事实与预测混为一谈。
+
 ```bash
 curl -X POST -H "Authorization: Bearer $FCM_AGENT_TOKEN" \
   -H 'Content-Type: application/json' \

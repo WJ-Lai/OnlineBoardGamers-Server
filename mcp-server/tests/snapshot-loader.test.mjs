@@ -108,7 +108,10 @@ test('public Agent state contains visible decision data but not private transien
   const adapter = new FCMAdapter({ username: 'agent-red' })
   adapter.modules = {
     storeMod: { useModelStore: () => store },
-    model: { giveRestaurantRangesForHouse: () => [{ restaurant: 12, distance: 3 }] },
+    model: {
+      giveRestaurantRangesForHouse: () => [3],
+      hasGarden: () => false,
+    },
     reference: {
       BLANK_EMPLOYEE_SPACE: -1,
       MARKETERS: [],
@@ -127,11 +130,17 @@ test('public Agent state contains visible decision data but not private transien
       allowedCampaigns: () => [],
       giveMaxDurationForMarketer: () => 0,
       givePossibleFoodDrinksChoice: () => [],
+      selectNeedsPriority: (goods) => [goods],
+      adjustDistanceForMilestones: (distances) => distances,
+      getPlaceInFullTurnOrderForPlayer: () => 0,
     },
     player: {
       giveNbFreeSlots: () => 2,
       playersPrice: () => 10,
       playerDiscount: () => 0,
+      playerHasResources: () => true,
+      numberOfWaitress: () => 0,
+      numberOfMusicians: () => 0,
     },
     controller: { producersForWorkingDay: () => [] },
   }
@@ -143,7 +152,7 @@ test('public Agent state contains visible decision data but not private transien
   const state = adapter.getState()
   assert.equal(state.players[0].name, 'Red Bot')
   assert.deepEqual(state.board.houses, [{ number: 18 }])
-  assert.deepEqual(state.houseDemands[0].restaurantDistances, [{ restaurant: 12, distance: 3 }])
+  assert.deepEqual(state.houseDemands[0].restaurantDistances, [3])
   assert.deepEqual(state.availableEmployees, { 13: 3 })
   assert.deepEqual(state.history, [{ message: 'Red Bot hired' }])
   assert.deepEqual(state.catalog.goods[4], { id: 4, name: 'burger' })
@@ -155,6 +164,11 @@ test('public Agent state contains visible decision data but not private transien
   })
   assert.equal(state.decisionSupport.economyPlayers[0].salary.due, 5)
   assert.equal(state.decisionSupport.economyPlayers[0].freeSlots, 2)
+  assert.equal(state.decisionSupport.strategicThreats.milestones[1].status, 'shared-this-turn')
+  assert.deepEqual(
+    state.decisionSupport.strategicThreats.market.houses[0].eligibleSupplierSeats,
+    [0],
+  )
   assert.deepEqual(state.untrustedTextFields, ['chat'])
   assert.equal(JSON.stringify(state).includes('secret simultaneous choice'), false)
   assert.equal(Object.hasOwn(state, 'reserveCards'), false)

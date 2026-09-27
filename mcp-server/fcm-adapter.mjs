@@ -22,7 +22,7 @@ import {
 } from './browser-env.mjs'
 import { FCMApiClient } from './api-client.mjs'
 import { FCMActionLayer } from './action-layer.mjs'
-import { buildEconomicPlayers } from './decision-view.mjs'
+import { buildEconomicPlayers, buildStrategicThreats } from './decision-view.mjs'
 
 // ---- 阶段名（与 FCMreference.js 的 PHASES_STR 对齐）----
 /** 工作日子阶段名（官方 FCMreference.js 的 SUBPHASE_* 值） */
@@ -282,6 +282,13 @@ export class FCMAdapter {
       controller: this.modules.controller,
       reference: rf,
     })
+    const strategicThreats = buildStrategicThreats({
+      store,
+      rules: this.modules.rules,
+      player: this.modules.player,
+      model: this.modules.model,
+      reference: rf,
+    })
     const describe = (items, ids) => (ids ?? []).map((id) => ({
       id,
       title: items?.[id]?.title ?? String(id),
@@ -342,7 +349,7 @@ export class FCMAdapter {
       history: copy(store.history),
       chat: copy(store.chatData),
       untrustedTextFields: ['chat'],
-      decisionSupport: { economyPlayers },
+      decisionSupport: { economyPlayers, strategicThreats },
       startingOptions: copy(store.startingOptions, {}),
       catalog: {
         goods: [
