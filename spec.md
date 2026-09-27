@@ -1,7 +1,7 @@
 # OBG / FCM Agent Integration Specification
 
-Status: base-game implementation and acceptance complete; final clean commit/push in progress
-Version: 5
+Status: base-game implementation accepted and saved to the owner's fork; upstream rebase pending
+Version: 6
 Updated: 2026-09-27
 Scope: base-game FCM, 2–6 independent seats, human/Agent mixed games and all-Agent games
 
@@ -135,7 +135,9 @@ Required before merging:
    persistence of game memberships and cross-owner isolation.
 4. Vue production build and Django migration checks pass.
 5. A fresh base-game acceptance run completes with one human Session and at least two PAT Agents.
-6. Search and diff review show no optional-module code, generated bundles, secrets or local probes.
+6. Search and diff review show no optional-module code, unrelated generated assets, secrets or
+   local probes. If the deployment does not build Vue, the cleanly rebuilt tracked runtime bundle
+   is a required artifact rather than an unrelated generated asset.
 7. The full project suite introduces no failures beyond failures reproducible on the current
    upstream base; any upstream failures are reported rather than hidden or changed in this PR.
 
@@ -149,7 +151,8 @@ The full Django suite ran 220 tests; the only two failures are unchanged upstrea
 
 - the private Temporary Worker module and all of its assets, rules and tests;
 - unrelated UI, LAN, notification, replay or historical-game fixes;
-- generated Vue bundles and one-off diagnostic scripts;
+- unrelated generated Vue assets and one-off diagnostic scripts; the two tracked runtime bundles
+  may be included when required by the upstream deployment path;
 - the existing built-in 1v1 FCM AI;
 - public OAuth, Remote MCP, application registration and public hosting operations;
 - expansion-specific Agent decisions beyond the base-game action registry.
@@ -198,13 +201,55 @@ verification gates in section 8 before release.
 
 ### Remaining release tasks
 
-1. Re-run Node, targeted Django, migration/build checks and compare full-suite failures with upstream.
-2. Review the final diff to exclude Temporary Worker code, local host settings, secrets and
-   unrelated generated assets.
-3. Commit and push the clean Agent-only change to the owner's fork.
+1. Rebase the Agent branch onto current upstream `d6cf592` (five upstream commits newer than the
+   accepted base), paying particular attention to upstream FCM sales-resolution fix `d3297b1`.
+2. Resolve conflicts without replacing upstream FCM rules, then re-run Node, targeted Django,
+   migration/build checks, the full suite comparison and a fresh mixed human/two-Agent game.
+3. Produce the tracked Vue runtime bundle from the rebased clean source, or add a reliable build
+   step. The current setup scripts install dependencies but do not build the bundle.
+4. Review the final diff to exclude Temporary Worker code, local host settings, secrets and
+   unrelated generated assets; then update the owner's fork and prepare the upstream PR.
 
 ### Deferred expansion work
 
 For each optional module, inventory its extra phases, visible state and human controls; then add
 registry actions, legal candidates, official controller execution, serialization/resume tests and
 forged-input tests. Do not advertise a module until an equivalent human/Agent phase fixture passes.
+
+## 12. Strategy-capable FCM AI follow-up
+
+The Agent API and MCP solve **safe observation and legal execution**. They do not by themselves
+provide a winning policy. A client that selects the first legal action can complete a game while
+showing no understanding of milestones, engine building, price wars, demand creation, turn order,
+game length or opponent threats.
+
+The base-game wire surface contains most public raw facts needed to construct a strategy engine,
+but several facts remain opaque or expensive for an LLM to derive repeatedly: organization-chart
+semantics encoded in the flat employee array, decoded board topology, current effective prices and
+salary obligations, house-by-house supplier competition, predicted dinner allocation, milestone
+races, and the consequences of complete multi-action turn plans. Raw history codes are also not a
+usable long-term strategic memory.
+
+This is a separate client-side AI project, not a reason to put strategy or a second rules engine in
+the OBG server. The detailed design is maintained in
+`/home/vincent/fcm-ai/docs/fcm-ai-architecture.md`.
+
+### AI readiness backlog
+
+1. Add a machine-readable decision audit for every base-game phase: visible inputs, derived
+   features, legal candidates, hidden information and expected consequences.
+2. Expose or compute a semantic `DecisionView`: decoded company structure and board graph,
+   effective price/salary, reachability, supplier scores, projected sales and milestone threats.
+3. Build a deterministic baseline Agent with persistent per-game strategy memory, phase-specific
+   candidate generation, tactical calculators and a documented evaluation function.
+4. Build an offline clone/simulation environment around the existing official FCM engine. It must
+   preserve simultaneous phases and must never expose hidden choices to the live Agent.
+5. Add fixed scenario tests plus a league benchmark against random, first-legal, built-in OBG AI,
+   scripted strategies and historical versions. Measure rule violations, win/rank rate, seat bias,
+   decision latency and robustness—not just whether a game finishes.
+6. Use the LLM as a high-level planner, rules explainer and opponent-model narrator over a small
+   set of calculated candidates. Do not ask it to perform raw map arithmetic or remember the whole
+   rulebook from prose.
+7. Only after the simulator and baselines are reliable, evaluate imitation learning and self-play.
+   PPO is an experiment, not the default architecture; its viability depends on hierarchical
+   action masking, stable observations, a well-designed reward and a population of opponents.
