@@ -37,6 +37,9 @@ for game in AQY/vueAQY BUS/vueBUS CNS/vueCNS FCM/vueFCM KFW/vueKFW TGZ/vueTGZ WE
     fi
 done
 
+echo "Building the FCM browser runtime..."
+./FCM/vueFCM/build.sh
+
 # Database
 echo "Running database migrations..."
 .venv_local/bin/python manage.py migrate

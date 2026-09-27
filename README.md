@@ -75,6 +75,10 @@ Install [process-compose](https://github.com/F1bonacc1/process-compose/releases)
 process-compose up  # starts all services with a live TUI
 ```
 
+`setup_linux.sh` builds the FCM browser runtime after installing its dependencies. After changing
+files under `FCM/vueFCM/src`, rebuild it explicitly with `./FCM/vueFCM/build.sh`; Django serves the
+resulting tracked `FCM/static/FCM/FCMvuedist/main.js` and `main.css` files.
+
 Useful commands (or use the TUI directly):
 - `process-compose process stop web` — stop a single process
 - `process-compose process start web` — restart it
