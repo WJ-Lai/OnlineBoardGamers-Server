@@ -243,3 +243,47 @@ test('executeBatch treats an explicit restructuring submission as confirmed', as
 
   assert.deepEqual(endCalls, [{ forced: true, seat: 1 }])
 })
+
+test('executeBatch rejects a swallowed final simultaneous-phase failure', async () => {
+  const adapter = {
+    async loadSnapshot() {},
+    async doAction() { return { ok: true } },
+    async endTurn() {
+      await globalThis.__fcmLocalTransport('/FCM/processTurn/', {
+        body: JSON.stringify({
+          action: 'saveSimulMove',
+          moveData: 'H4sIAAAAAAAAA4uOjta1iNWJjo3Vida1jI0FAMwv/WYQAAAA',
+          notRequiedPlayerNames: ['human'],
+        }),
+      })
+      // Models the legacy saveSimulMove catch block swallowing a processing error:
+      // all moves were accepted, but saveNormal was never emitted.
+    },
+    exportBlob() { return 'must-not-be-accepted' },
+    getState() {
+      return {
+        phase: 7, turn: 3, turnOrder: [],
+        players: [{ name: 'human' }, { name: 'agent' }],
+      }
+    },
+    getLegalActions() { return { yourTurn: false, isSimulPhase: true, actions: [] } },
+  }
+  const runtime = new EngineRuntime({
+    createAdapter: () => adapter,
+    metadata: async () => ({ protocolVersion: 'test-v1', rulesetHash: 'e'.repeat(64) }),
+  })
+
+  await assert.rejects(
+    () => runtime.executeBatch({
+      snapshot: { ...validSnapshot(), phase: 7 },
+      actor: { name: 'agent', seat: 1 }, expectedVersion: '44',
+      actions: [{ type: 'resolve_payday', fireEmployees: [], payWithResources: [] }],
+      transportContext: {
+        existingMoves: [['human', [-1], '', []], ['agent', [-1], '', []]],
+        pendingPlayerNames: ['agent'], acceptedPhases: [5, 6, 7, 8, 9, 11, 12, 15],
+        nextVersion: '45', sideData: '',
+      },
+    }),
+    (error) => error.code === 'ENGINE_TRANSITION_FAILED',
+  )
+})

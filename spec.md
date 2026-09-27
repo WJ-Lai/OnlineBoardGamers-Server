@@ -258,9 +258,13 @@ the OBG server. The detailed design is maintained in
 
 Current checkpoint: item 2 is implemented for the base game. The in-memory environment supports
 `reset/observe/legal/step/clone`, official simultaneous-move resolution and terminal persistence.
-Seeded end-to-end weak-policy runs reached Game Over with two and three players. Item 3's dinner
-projection is implemented; the remaining semantic `DecisionView` fields and benchmark league are
-still open.
+Seeded `safe-first-legal-v1` runs reached Game Over with two and three players; the first two
+`random-legal-v1` two-player seeds also completed with zero rejected actions. The randomized run
+found and closed an inherited simultaneous-phase edge case: seats automatically skipped by the
+official controller during restructuring/payday no longer leave an undecodable empty move, and
+the runtime now fails closed if a final simultaneous submission produces no canonical save.
+Item 3's dinner projection is implemented; the remaining semantic `DecisionView` fields, built-in
+AI adapter and full benchmark league are still open.
    PPO is an experiment, not the default architecture; its viability depends on hierarchical
    action masking, stable observations, a well-designed reward and a population of opponents. If
    potential-difference shaping is used, its evaluator must be frozen and held-out calibrated, and

@@ -251,6 +251,16 @@ export class EngineRuntime {
     const capturedSave = transport.canonicalSave ?? (
       transport.simultaneousSubmission ? null : syntheticSave
     )
+    if (
+      transport.simultaneousSubmission
+      && transport.simultaneousSubmission.playersToMove.length === 0
+      && capturedSave == null
+    ) {
+      throw codedError(
+        'ENGINE_TRANSITION_FAILED',
+        'the final simultaneous submission did not produce a canonical save',
+      )
+    }
     // The legacy FCM controller emits displayName values in nextPlayer. Agent labels
     // are presentation-only; convert them back to stable internal account names
     // before Django validates membership and commits the turn.

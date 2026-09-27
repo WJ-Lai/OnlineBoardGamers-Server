@@ -806,6 +806,10 @@ export async function saveSimulMove(moveData, continueFromStalledGame = false) {
 	// Restructuring - no employees
 	if (store.gameflow.phase === rf.PHASE_RESTRUCTURING) {
 		for (let i = 0; i < store.players.length; i++) {
+			if (controller.canSkipCurrentPlayer(i)) {
+				if (!notRequiedPlayerNames.includes(store.players[i].name)) notRequiedPlayerNames.push(store.players[i].name)
+				continue
+			}
 			if (store.players[i].beach.length === 0) {
 				let noEmployees = false
 				if (store.players[i].employees.length === 0) noEmployees = true
@@ -820,6 +824,17 @@ export async function saveSimulMove(moveData, continueFromStalledGame = false) {
 				}
 
 				if (noEmployees && !notRequiedPlayerNames.includes(store.players[i].name)) notRequiedPlayerNames.push(store.players[i].name)
+			}
+		}
+	}
+	// Payday uses a simultaneous envelope, but the controller removes players
+	// whose payday is fully automatic from turnOrder. Tell the persistence layer
+	// about those seats too, otherwise the final human/Agent submission waits for
+	// (or attempts to decode) a move that can never exist.
+	if (store.gameflow.phase === rf.PHASE_PAYDAY) {
+		for (let i = 0; i < store.players.length; i++) {
+			if (controller.canSkipCurrentPlayer(i) && !notRequiedPlayerNames.includes(store.players[i].name)) {
+				notRequiedPlayerNames.push(store.players[i].name)
 			}
 		}
 	}
@@ -1548,6 +1563,7 @@ export function processSimulMoveData(data) {
 			let _phasesArray = decompressedData[i][1]
 			let _timestamp = decompressedData[i][2]
 			let content = decompressedData[i][3]
+			if ((!Array.isArray(content) || content.length !== 3) && controller.canSkipCurrentPlayer(i)) continue
 			// Check if there's any dodgy data
 			// First check if it's a pointless move - and then allow it
 			if (_phasesArray.length === 1 && _phasesArray[0] === -1) {
@@ -1618,6 +1634,13 @@ export function processSimulMoveData(data) {
 			let histAdded = false
 			let playerObj = store.players[i]
 			if (playerObj.displayName === rf.BOT_NAME) {
+				foodPayements.push([])
+				continue
+			}
+			// Players with an automatic zero-salary payday are removed from the
+			// simultaneous turn order and therefore have no persisted move envelope.
+			// Keep the per-seat payment array aligned without inventing an action.
+			if (!Array.isArray(decompressedData[i]?.[3]?.[0]) && controller.canSkipCurrentPlayer(i)) {
 				foodPayements.push([])
 				continue
 			}
