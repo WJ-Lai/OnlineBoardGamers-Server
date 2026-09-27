@@ -269,7 +269,11 @@ Agent steps suppress the browser's implicit auto-run only inside the offline env
 online behavior is unchanged. A two-map/four-game paired-seat smoke league completed 4/4 with zero
 violations and revealed severe seat bias (seat 0 won all four), so a larger paired league remains
 required before comparing policy strength. The remaining semantic `DecisionView` fields and
-privacy-safe human trajectory import are still open.
+privacy-safe human trajectory import are still open. The strategy repository now implements the
+human-data import/review trust boundary: one-seat anonymous provenance, explicit consent/license,
+content hashing and three independent approval attestations; hidden choices, beliefs, credentials,
+unadvertised actions and prose fail closed. A trusted live human-UI exporter is still open, so no
+ordinary prose report is treated as a training trajectory.
    PPO is an experiment, not the default architecture; its viability depends on hierarchical
    action masking, stable observations, a well-designed reward and a population of opponents. If
    potential-difference shaping is used, its evaluator must be frozen and held-out calibrated, and
