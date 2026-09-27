@@ -211,3 +211,35 @@ test('executeBatch converts presentation labels back to authenticated player nam
   assert.deepEqual(result.canonicalSave.nextPlayer, ['agent'])
   assert.equal(result.state.players[1].name, 'Red Bot')
 })
+
+test('executeBatch treats an explicit restructuring submission as confirmed', async () => {
+  const endCalls = []
+  const adapter = {
+    async loadSnapshot() {},
+    async doAction() { return { ok: true } },
+    async endTurn(forced, seat) { endCalls.push({ forced, seat }) },
+    exportBlob() { return 'canonical-blob' },
+    getState() {
+      return {
+        phase: 3, turn: 2, turnOrder: [1, 0],
+        players: [{ name: 'human' }, { name: 'agent' }],
+      }
+    },
+    getLegalActions() {
+      return { yourTurn: true, isSimulPhase: true, actions: [{ type: 'place_employees' }] }
+    },
+  }
+  const runtime = new EngineRuntime({
+    createAdapter: () => adapter,
+    metadata: async () => ({ protocolVersion: 'test-v1', rulesetHash: 'd'.repeat(64) }),
+  })
+
+  await runtime.executeBatch({
+    snapshot: { ...validSnapshot(), phase: 3 },
+    actor: { name: 'agent', seat: 1 },
+    expectedVersion: '44',
+    actions: [{ type: 'place_employees', slots: [0], employees: [1] }],
+  })
+
+  assert.deepEqual(endCalls, [{ forced: true, seat: 1 }])
+})

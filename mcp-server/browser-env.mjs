@@ -233,6 +233,7 @@ export function setInitData({
     yourTurnAudioType,
     gameData,
     currentPlayers,
+    disableLiveWS: true,
   }
   globalThis.window.initData = globalThis.initData
 }

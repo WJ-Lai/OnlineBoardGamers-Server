@@ -75,7 +75,7 @@ export async function initGame() {
 	if (window.initData.rewindHostHTML) store.viewSettings.rewindHostHTML = window.initData.rewindHostHTML
 	// Set up Involved Player data
 	if (personal.pov >= 0) {
-		personal.liveWS = true
+		personal.liveWS = !window.initData.disableLiveWS
 		if (window.initData.preferedColor > -1) personal.preferredColour = window.initData.preferedColor
 		personal.secondsToNextKickout = window.initData.secondsToNextKickout
 		// Set up kickout timer / kickout options
@@ -311,7 +311,7 @@ export async function initGame() {
 	}
 
 	// start WS
-	if (window.initData.pov >= -9) {
+	if (window.initData.pov >= -9 && personal.liveWS) {
 		WS.StartWebSocket().catch(() => {
 			console.log("WebSocket background task initialized.")
 		})

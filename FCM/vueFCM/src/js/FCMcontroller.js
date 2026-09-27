@@ -1639,6 +1639,10 @@ export async function endPlayerTurn(forced, isPointlessMove = false) {
 	for (let i = 0; i < store.players.length; i++) if (store.players[i].displayName === rf.BOT_NAME) numNonPlayers++
 	if (numNonPlayers === store.players.length - 1) {
 		model.endGame()
+		// Persist the terminal state just like every other end-of-turn path.  Without
+		// this save, the browser shows Game Over only in memory and a reload restores
+		// the preceding active position.
+		await IO.saveGameNormal(false, false, false)
 		return
 	}
 

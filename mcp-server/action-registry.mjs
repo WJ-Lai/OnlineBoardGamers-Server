@@ -40,10 +40,15 @@ const field = {
   fridgeChoice: { type: 'string', enum: ['kimchi', 'rest'] },
 }
 
-function define(type, propertyNames = [], { finishesTurn = false, exposed = true } = {}) {
+function define(
+  type,
+  propertyNames = [],
+  { finishesTurn = false, forceEndTurn = false, exposed = true } = {},
+) {
   return Object.freeze({
     type,
     finishesTurn,
+    forceEndTurn,
     exposed,
     inputSchema: Object.freeze({
       type: 'object',
@@ -61,7 +66,10 @@ export const ACTION_DEFINITIONS = Object.freeze({
   PLACE_RESTAURANT: define('place_restaurant', ['index', 'rotation']),
   CHOOSE_RESERVE_CARD: define('choose_reserve_card', ['cardValue'], { finishesTurn: true }),
   HIRE: define('hire', ['employee']),
-  PLACE_EMPLOYEES: define('place_employees', ['slots', 'employees'], { finishesTurn: true }),
+  PLACE_EMPLOYEES: define('place_employees', ['slots', 'employees'], {
+    finishesTurn: true,
+    forceEndTurn: true,
+  }),
   PRODUCE: define('produce', ['producer', 'item', 'amount']),
   COLLECT_DRINKS: define('collect_drinks', ['producer', 'route']),
   TRAIN: define('train', ['employee', 'toEmployee', 'origin', 'steps']),
@@ -74,7 +82,7 @@ export const ACTION_DEFINITIONS = Object.freeze({
   RESOLVE_PAYDAY: define('resolve_payday', ['fireEmployees', 'payWithResources'], { finishesTurn: true }),
   RESOLVE_CLEANUP: define('resolve_cleanup', ['discardResources', 'fridgeChoice'], { finishesTurn: true }),
   FINISH_TURN: define('finish_turn', [], { finishesTurn: true, exposed: false }),
-  END_TURN: define('end_turn', [], { finishesTurn: true }),
+  END_TURN: define('end_turn', [], { finishesTurn: true, forceEndTurn: true }),
 })
 
 export const ACTIONS = Object.freeze(Object.fromEntries(
@@ -112,4 +120,8 @@ export function getActionDefinition(type) {
 
 export function actionFinishesTurn(type) {
   return getActionDefinition(type).finishesTurn
+}
+
+export function actionForcesEndTurn(type) {
+  return getActionDefinition(type).forceEndTurn
 }

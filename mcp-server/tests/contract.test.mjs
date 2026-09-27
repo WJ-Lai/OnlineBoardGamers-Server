@@ -5,6 +5,7 @@ import { FCMActionLayer } from '../action-layer.mjs'
 import { FCMSystemError } from '../errors.mjs'
 import { FCMAdapter, PHASE_NAMES } from '../fcm-adapter.mjs'
 import { commandFingerprint, TOOLS, toMcpError } from '../server.mjs'
+import { actionForcesEndTurn } from '../action-registry.mjs'
 
 test('MCP tools never accept credentials or caller-selected seats', () => {
   for (const tool of TOOLS) {
@@ -22,6 +23,13 @@ test('write contract requires a version and explicit producer field', () => {
   assert.match(tool.inputSchema.properties.idempotencyKey.pattern, /\{12\}/)
   assert.equal(tool.inputSchema.properties.action.properties.producer.type, 'integer')
   assert.equal(tool.annotations.readOnlyHint, false)
+})
+
+test('explicit restructuring and end-turn commands bypass only UI confirmation prompts', () => {
+  assert.equal(actionForcesEndTurn('place_employees'), true)
+  assert.equal(actionForcesEndTurn('end_turn'), true)
+  assert.equal(actionForcesEndTurn('choose_reserve_card'), false)
+  assert.equal(actionForcesEndTurn('resolve_payday'), false)
 })
 
 test('Phase 2 exposes create, join, and wait tools with correct safety hints', () => {

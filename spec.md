@@ -1,7 +1,7 @@
 # OBG / FCM Agent Integration Specification
 
-Status: base-game implementation accepted and saved to the owner's fork; upstream rebase pending
-Version: 6
+Status: base-game integration rebased on upstream and saved to the owner's fork; strategy follow-up active
+Version: 7
 Updated: 2026-09-27
 Scope: base-game FCM, 2–6 independent seats, human/Agent mixed games and all-Agent games
 
@@ -142,10 +142,11 @@ Required before merging:
    upstream base; any upstream failures are reported rather than hidden or changed in this PR.
 
 Latest post-migration acceptance evidence: fresh isolated SQLite database, one human Session plus
-two independent permanent-Token Agents, Game Over at turn 16 after 293 audited commands. The
-previous clean-base run on upstream `d8b2682` also reached Game Over at turn 15 after 278 commands.
-The full Django suite ran 220 tests; the only two failures are unchanged upstream defects in
-`Lobby.tests` (missing imported helper) and the explicitly named RNB `test_F_FAILING_...` test.
+two independent permanent-Token Agents, Game Over at turn 17 after 321 audited commands on the
+final controller/runtime changes. Earlier isolated runs also reached Game Over at turn 15 after
+276 commands and turn 16 after 293 commands. The full Django suite ran 220 tests; the only two
+failures are unchanged upstream defects in `Lobby.tests` (missing imported helper) and the
+explicitly named RNB `test_F_FAILING_...` test. The final targeted Agent suites pass 51/51.
 
 ## 9. Explicitly excluded from this change
 
@@ -202,10 +203,12 @@ verification gates in section 8 before release.
 
 ### Remaining release tasks
 
-1. Rebuild and review the tracked Vue runtime bundle after the dinner-projection instrumentation.
-2. Review the final diff to exclude Temporary Worker code, local host settings, secrets and
-   unrelated generated assets, then push the rebased branch to the owner's fork.
-3. Keep strategy-AI work in `/home/vincent/fcm-ai`; it is not part of the upstream integration PR.
+1. Review the final branch diff for Temporary Worker code, local host settings, secrets and
+   unrelated generated assets, then save the verified commits to the owner's fork.
+2. Keep strategy-AI policy code in `/home/vincent/fcm-ai`; the reusable offline official-engine
+   adapter remains beside the server engine and is independently tested.
+3. Open an upstream pull request only after the owner chooses to do so; this checkpoint targets
+   the owner's fork first.
 
 ### Deferred expansion work
 
@@ -252,6 +255,12 @@ the OBG server. The detailed design is maintained in
 8. Use the LLM only as a selector over validated near-tie candidates. Require paired-seed/seat A/B
    evidence of win/rank lift after cost and latency; remove it if it adds no measurable value.
 9. Only after the simulator and baselines are reliable, evaluate imitation learning and self-play.
+
+Current checkpoint: item 2 is implemented for the base game. The in-memory environment supports
+`reset/observe/legal/step/clone`, official simultaneous-move resolution and terminal persistence.
+Seeded end-to-end weak-policy runs reached Game Over with two and three players. Item 3's dinner
+projection is implemented; the remaining semantic `DecisionView` fields and benchmark league are
+still open.
    PPO is an experiment, not the default architecture; its viability depends on hierarchical
    action masking, stable observations, a well-designed reward and a population of opponents. If
    potential-difference shaping is used, its evaluator must be frozen and held-out calibrated, and

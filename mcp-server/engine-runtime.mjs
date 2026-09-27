@@ -1,6 +1,10 @@
 import { buildEngineMetadata, normalizeEngineSnapshot, seededRandom } from './engine-contract.mjs'
 import { FCMAdapter } from './fcm-adapter.mjs'
-import { actionFinishesTurn, getActionDefinition } from './action-registry.mjs'
+import {
+  actionFinishesTurn,
+  actionForcesEndTurn,
+  getActionDefinition,
+} from './action-registry.mjs'
 import { AuthoritativeTransport } from './authoritative-transport.mjs'
 import Ajv from 'ajv'
 
@@ -79,15 +83,22 @@ function validateActions(actions) {
 }
 
 async function loadDeterministicSnapshot(adapter, snapshot, actor) {
-  if (snapshot.blob || snapshot.initializationSeed == null) {
-    return adapter.loadSnapshot(snapshot, actor)
-  }
+  if (snapshot.blob || snapshot.initializationSeed == null) return adapter.loadSnapshot(snapshot, actor)
   const originalRandom = Math.random
+  const previousTransport = globalThis.__fcmLocalTransport
   Math.random = seededRandom(snapshot.initializationSeed)
+  // Official initGame persists a freshly generated board as a browser side effect.
+  // In the offline/runtime path the caller owns persistence, so acknowledge that
+  // save locally and export the initialized store instead of touching HTTP/Django.
+  globalThis.__fcmLocalTransport = async () => new Response(
+    JSON.stringify({ latestUpdate: snapshot.latestUpdate }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  )
   try {
     return await adapter.loadSnapshot(snapshot, actor)
   } finally {
     Math.random = originalRandom
+    globalThis.__fcmLocalTransport = previousTransport
   }
 }
 
@@ -215,7 +226,9 @@ export class EngineRuntime {
         await adapter.doAction(action, { playerIndex: seat, save: false })
       }
       const lastType = command.actions.at(-1).type
-      if (actionFinishesTurn(lastType)) await adapter.endTurn(false, seat)
+      if (actionFinishesTurn(lastType)) {
+        await adapter.endTurn(actionForcesEndTurn(lastType), seat)
+      }
     } finally {
       globalThis.__fcmLocalTransport = previousTransport
     }

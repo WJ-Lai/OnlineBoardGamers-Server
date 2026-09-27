@@ -13,7 +13,11 @@ import { FCMAdapter, PHASE_NAMES } from './fcm-adapter.mjs'
 import { FCMApiClient } from './api-client.mjs'
 import { FCMActionError, FCMSystemError } from './errors.mjs'
 import { SerialExecutor } from './serial-executor.mjs'
-import { ACTION_INPUT_SCHEMA, actionFinishesTurn } from './action-registry.mjs'
+import {
+  ACTION_INPUT_SCHEMA,
+  actionFinishesTurn,
+  actionForcesEndTurn,
+} from './action-registry.mjs'
 
 const OBJECT_OUTPUT = { type: 'object', additionalProperties: true }
 const READ_ONLY = {
@@ -381,7 +385,7 @@ export async function handleTool(name, args = {}) {
               version: String(adapter.api.latestUpdate),
             }
           }
-          const result = await adapter.endTurn(false)
+          const result = await adapter.endTurn(actionForcesEndTurn(args.action.type))
           return { ...result, gameID: args.gameID, version: String(adapter.api.latestUpdate) }
         }
         const phase = adapter.store.gameflow.phase
@@ -393,7 +397,7 @@ export async function handleTool(name, args = {}) {
           save: args.dryRun ? false : !finishesTurn,
         })
         if (finishesTurn && !args.dryRun) {
-          const turnResult = await adapter.endTurn(false)
+          const turnResult = await adapter.endTurn(actionForcesEndTurn(args.action.type))
           return {
             ...result,
             saved: true,
