@@ -110,10 +110,30 @@ test('public Agent state contains visible decision data but not private transien
     storeMod: { useModelStore: () => store },
     model: { giveRestaurantRangesForHouse: () => [{ restaurant: 12, distance: 3 }] },
     reference: {
+      BLANK_EMPLOYEE_SPACE: -1,
+      MARKETERS: [],
+      CAN_BUILD_RESTAURANT: [],
       EMPLOYEES_STR: [{ title: 'Waitress', description: 'Earns tips' }],
       MILESTONES_STR: [{ title: 'First to hire 3', description: 'Bonus' }],
       BASE_GAME_MILESTONES: [0],
     },
+    rules: {
+      salary: () => 5,
+      employeesRequiringASalary: () => [17],
+      getTotalRecruitingPoints: () => 0,
+      getTotalRecruitDiscountPoints: () => 0,
+      getTrainingPoints: () => ({ total: 0, level2: 0, level3: 0, unlimited: false }),
+      getSubSlotsForEmployee: () => 0,
+      allowedCampaigns: () => [],
+      giveMaxDurationForMarketer: () => 0,
+      givePossibleFoodDrinksChoice: () => [],
+    },
+    player: {
+      giveNbFreeSlots: () => 2,
+      playersPrice: () => 10,
+      playerDiscount: () => 0,
+    },
+    controller: { producersForWorkingDay: () => [] },
   }
   adapter.playerIndex = 0
   adapter.actorName = 'agent-red'
@@ -133,6 +153,8 @@ test('public Agent state contains visible decision data but not private transien
   assert.deepEqual(state.catalog.milestones[0], {
     id: 0, title: 'First to hire 3', description: 'Bonus',
   })
+  assert.equal(state.decisionSupport.economyPlayers[0].salary.due, 5)
+  assert.equal(state.decisionSupport.economyPlayers[0].freeSlots, 2)
   assert.deepEqual(state.untrustedTextFields, ['chat'])
   assert.equal(JSON.stringify(state).includes('secret simultaneous choice'), false)
   assert.equal(Object.hasOwn(state, 'reserveCards'), false)

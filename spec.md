@@ -268,13 +268,20 @@ dedicated seeded offline benchmark adapter and a separate source `policyHash`; o
 Agent steps suppress the browser's implicit auto-run only inside the offline environment, while
 online behavior is unchanged. A two-map/four-game paired-seat smoke league completed 4/4 with zero
 violations and revealed severe seat bias (seat 0 won all four), so a larger paired league remains
-required before comparing policy strength. The remaining semantic `DecisionView` fields and
-privacy-safe human trajectory import are still open. The strategy repository now implements the
+required before comparing policy strength. The remaining semantic `DecisionView` work is market
+competition and milestone threats. The strategy repository now implements the
 human-data import/review trust boundary: one-seat anonymous provenance, explicit consent/license,
 content hashing and three independent approval attestations; hidden choices, beliefs, credentials,
 unadvertised actions and prose fail closed. A trusted live human-UI exporter is still open, so no
 ordinary prose report is treated as a training trajectory.
-   PPO is an experiment, not the default architecture; its viability depends on hierarchical
+The authoritative state now also exposes `decisionSupport.economyPlayers`, calculated only through
+the loaded official player/rules/controller functions. It decodes CEO/shared subordinate slots,
+free slots, salary liabilities, effective price/discount and recruiting, training, production,
+marketing and restaurant-building capacity. All 35 base phase fixtures verify the projection is
+present and structurally valid; the adapter fails closed if a required official calculation is
+missing.
+
+PPO is an experiment, not the default architecture; its viability depends on hierarchical
    action masking, stable observations, a well-designed reward and a population of opponents. If
    potential-difference shaping is used, its evaluator must be frozen and held-out calibrated, and
    promotion still uses raw win/rank metrics.

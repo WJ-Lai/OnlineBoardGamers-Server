@@ -22,6 +22,7 @@ import {
 } from './browser-env.mjs'
 import { FCMApiClient } from './api-client.mjs'
 import { FCMActionLayer } from './action-layer.mjs'
+import { buildEconomicPlayers } from './decision-view.mjs'
 
 // ---- 阶段名（与 FCMreference.js 的 PHASES_STR 对齐）----
 /** 工作日子阶段名（官方 FCMreference.js 的 SUBPHASE_* 值） */
@@ -274,6 +275,13 @@ export class FCMAdapter {
     const store = this.store
     const rf = this.modules.reference ?? {}
     const copy = (value, fallback = []) => JSON.parse(JSON.stringify(value ?? fallback))
+    const economyPlayers = buildEconomicPlayers({
+      store,
+      rules: this.modules.rules,
+      player: this.modules.player,
+      controller: this.modules.controller,
+      reference: rf,
+    })
     const describe = (items, ids) => (ids ?? []).map((id) => ({
       id,
       title: items?.[id]?.title ?? String(id),
@@ -334,6 +342,7 @@ export class FCMAdapter {
       history: copy(store.history),
       chat: copy(store.chatData),
       untrustedTextFields: ['chat'],
+      decisionSupport: { economyPlayers },
       startingOptions: copy(store.startingOptions, {}),
       catalog: {
         goods: [
