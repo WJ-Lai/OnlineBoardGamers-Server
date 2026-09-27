@@ -1590,6 +1590,7 @@ export function doDinnerTime(replayOnly) {
 	const earnings = new Array(store.players.length).fill(0)
 	const coffeeEarnings = new Array(store.players.length).fill(0)
 	const histoHouses = []
+	const dinnerHouses = []
 
 	const possiblePizzaBomb = store.availableMilestones.includes(rf.FIRST_PIZZA_SOLD)
 	const possibleCoffeeMS = store.availableMilestones.includes(rf.FIRST_COFFEE_SOLD)
@@ -1643,19 +1644,18 @@ export function doDinnerTime(replayOnly) {
 			}
 		}
 
+		const competitorRank = (item) => {
+			let rank = (item.price + item.distance) * 10000
+			if (item.emp.includes(rf.B_MOVIE_STAR)) rank -= 5000
+			else if (item.emp.includes(rf.C_MOVIE_STAR)) rank -= 4000
+			else if (item.emp.includes(rf.D_MOVIE_STAR)) rank -= 3000
+			rank += item.musicians * 450 - item.waitress * 10 + item.order
+			return rank
+		}
+
 		if (winningCompetitors.length > 0) {
 			// Sort by ranking (lowest wins)
-			winningCompetitors.sort((a, b) => {
-				const getRank = (item) => {
-					let r = (item.price + item.distance) * 10000
-					if (item.emp.includes(rf.B_MOVIE_STAR)) r -= 5000
-					else if (item.emp.includes(rf.C_MOVIE_STAR)) r -= 4000
-					else if (item.emp.includes(rf.D_MOVIE_STAR)) r -= 3000
-					r += item.musicians * 450 - item.waitress * 10 + item.order
-					return r
-				}
-				return getRank(a) - getRank(b)
-			})
+			winningCompetitors.sort((a, b) => competitorRank(a) - competitorRank(b))
 
 			const winner = winningCompetitors[0]
 			const winnerColour = store.players[winner.playerIndex].colour
@@ -1685,6 +1685,21 @@ export function doDinnerTime(replayOnly) {
 		} else {
 			histoH.splice(2) // No one sold
 		}
+
+		dinnerHouses.push({
+			house: need.number,
+			goods: [...finalGoods],
+			winnerSeat: winningCompetitors.length > 0 ? winningCompetitors[0].playerIndex : null,
+			competitors: winningCompetitors.map((competitor) => ({
+				seat: competitor.playerIndex,
+				price: competitor.price,
+				distance: competitor.distance,
+				waitresses: competitor.waitress,
+				musicians: competitor.musicians,
+				turnOrder: competitor.order,
+				rank: competitorRank(competitor),
+			})),
+		})
 
 		if (histoH.length > 2 && histoH[2].length === 1) histoH[2][0].splice(2)
 		histoHouses.push(histoH)
@@ -1738,13 +1753,21 @@ export function doDinnerTime(replayOnly) {
 	if (!replayOnly) model.addHistory(rf.HIST_DINNER_TIME, histoHouses, -1, 0)
 
 	// --- PHASE 4: PAYOUTS & BANK BREAK ---
-	finalizePayouts(earnings, coffeeEarnings, ketchupWinners, sold, replayOnly)
+	const payoutSummary = finalizePayouts(earnings, coffeeEarnings, ketchupWinners, sold, replayOnly)
+	return {
+		houses: dinnerHouses,
+		sold: sold.map((sale) => ({ ...sale, needs: [...sale.needs] })),
+		goodsEarnings: [...earnings],
+		coffeeEarnings: [...coffeeEarnings],
+		playerIncome: payoutSummary.playerIncome,
+	}
 
 }
 
 function finalizePayouts(earnings, coffeeEarnings, ketchupWinners, sold, replayOnly) {
 	const store = useModelStore()
 	const histoIncome = []
+	const playerIncome = new Array(store.players.length).fill(0)
 	store.players.forEach((p, playerIndex) => {
 		const salesIncome = earnings[playerIndex] + (store.startingOptions.coffee ? coffeeEarnings[playerIndex] : 0)
 		let total = salesIncome
@@ -1761,6 +1784,7 @@ function finalizePayouts(earnings, coffeeEarnings, ketchupWinners, sold, replayO
 			total += supplement
 			hI.push(supplement)
 		}
+		playerIncome[playerIndex] = total
 
 		histoIncome[playerIndex] = hI
 		p.money += total
@@ -1810,6 +1834,7 @@ function finalizePayouts(earnings, coffeeEarnings, ketchupWinners, sold, replayO
 	} else if (store.bank < 0) {
 		handleBankBreak(replayOnly)
 	}
+	return { histoIncome, playerIncome }
 }
 
 function finalizeMilestones(firstPizzas, possiblePizzaBomb) {

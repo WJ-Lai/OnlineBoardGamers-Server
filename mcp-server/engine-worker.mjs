@@ -16,6 +16,7 @@ const SAFE_ERROR_CODES = new Set([
   'INVALID_SNAPSHOT',
   'NOT_A_PLAYER',
   'STALE_STATE',
+  'UNSUPPORTED_RULESET',
 ])
 
 function commandError(message, code = 'INVALID_ENGINE_COMMAND') {
@@ -47,7 +48,7 @@ function validateEnvelope(envelope) {
   }
   const unknown = Object.keys(envelope).filter((key) => !['operation', 'payload'].includes(key))
   if (unknown.length) throw commandError(`unknown engine request fields: ${unknown.sort().join(', ')}`)
-  if (!['inspect', 'execute'].includes(envelope.operation)) {
+  if (!['inspect', 'execute', 'projectDinner'].includes(envelope.operation)) {
     throw commandError(`unsupported engine operation: ${String(envelope.operation)}`)
   }
   return envelope
@@ -68,7 +69,9 @@ try {
   const runtime = new EngineRuntime()
   const result = request.operation === 'inspect'
     ? await runtime.inspect(request.payload)
-    : await runtime.executeBatch(request.payload)
+    : request.operation === 'projectDinner'
+      ? await runtime.projectDinner(request.payload)
+      : await runtime.executeBatch(request.payload)
   await writeAndExit({ ok: true, result }, 0)
 } catch (error) {
   const code = error?.code === 'ENGINE_INPUT_TOO_LARGE' || SAFE_ERROR_CODES.has(error?.code)

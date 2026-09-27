@@ -1,4 +1,4 @@
-import { describe, it, beforeAll, vi } from "vitest"
+import { describe, it, beforeAll, expect, vi } from "vitest"
 import { createPinia, setActivePinia } from "pinia"
 import fs from "node:fs"
 import path from "node:path"
@@ -63,7 +63,16 @@ describe("repro", () => {
 			return [new Array(store.players.length).fill(0), [], []]
 		})
 		const t0 = performance.now()
-		rules.doDinnerTime(false)
+		const summary = rules.doDinnerTime(false)
+		expect(summary.houses.map((house) => house.house)).toEqual(
+			[...summary.houses.map((house) => house.house)].sort((a, b) => a - b),
+		)
+		expect(summary.playerIncome).toHaveLength(store.players.length)
+		expect(summary.houses[0]).toEqual(expect.objectContaining({
+			house: expect.any(Number),
+			goods: expect.any(Array),
+			competitors: expect.any(Array),
+		}))
 		log("E doDinnerTime (coffee stubbed)", (performance.now() - t0).toFixed(1) + "ms", "calls:", JSON.stringify(calls))
 	}, 600000)
 

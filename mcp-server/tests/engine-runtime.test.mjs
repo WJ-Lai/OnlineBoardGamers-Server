@@ -53,6 +53,67 @@ test('inspect rejects caller-controlled actor fields outside the server identity
   )
 })
 
+test('projectDinner runs the official resolver on an isolated load and preserves its input', async () => {
+  const snapshot = validSnapshot()
+  const before = structuredClone(snapshot)
+  let state = {
+    phase: 6, turn: 8, bank: 100,
+    players: [{ money: 20, resources: [4] }, { money: 10, resources: [] }],
+    houseDemands: [{ house: 2, goods: [4] }],
+  }
+  const adapter = {
+    async loadSnapshot() {},
+    getState() { return structuredClone(state) },
+    modules: {
+      rules: {
+        doDinnerTime(replayOnly) {
+          assert.equal(replayOnly, true)
+          state = {
+            ...state,
+            bank: 90,
+            players: [{ money: 30, resources: [] }, { money: 10, resources: [] }],
+            houseDemands: [],
+          }
+          return {
+            houses: [{ house: 2, goods: [4], winnerSeat: 0, competitors: [] }],
+            sold: [{ house: 2, needs: [4], playerIndex: 0, distance: 1 }],
+            goodsEarnings: [10, 0], coffeeEarnings: [0, 0], playerIncome: [10, 0],
+          }
+        },
+      },
+    },
+  }
+  const runtime = new EngineRuntime({
+    createAdapter: () => adapter,
+    metadata: async () => ({ protocolVersion: 'test-v1', rulesetHash: 'd'.repeat(64) }),
+  })
+
+  const result = await runtime.projectDinner({
+    snapshot,
+    actor: { name: 'agent', seat: 1 },
+  })
+
+  assert.deepEqual(snapshot, before)
+  assert.equal(result.sourceVersion, '44')
+  assert.equal(result.before.bank, 100)
+  assert.equal(result.after.bank, 90)
+  assert.equal(result.projection.houses[0].winnerSeat, 0)
+  assert.deepEqual(result.projection.playerIncome, [10, 0])
+})
+
+test('projectDinner fails closed for expansion modules until their parity suite exists', async () => {
+  let created = 0
+  const runtime = new EngineRuntime({ createAdapter: () => { created += 1; return {} } })
+  await assert.rejects(
+    () => runtime.projectDinner({
+      snapshot: { ...validSnapshot(), startingOptions: ['coffee'] },
+      actor: { name: 'agent', seat: 1 },
+    }),
+    (error) => error.code === 'UNSUPPORTED_RULESET',
+  )
+  assert.equal(created, 0)
+})
+
 test('executeBatch requires optimistic version match and a complete commit boundary', async () => {
   let created = 0
   const runtime = new EngineRuntime({

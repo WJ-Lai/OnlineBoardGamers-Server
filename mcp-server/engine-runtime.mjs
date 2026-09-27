@@ -29,6 +29,20 @@ function codedError(code, message) {
   return error
 }
 
+function summarizeDinnerState(state) {
+  return {
+    phase: state.phase,
+    turn: state.turn,
+    bank: state.bank,
+    players: (state.players ?? []).map((player) => ({
+      money: player.money,
+      bankrupt: Boolean(player.bankrupt),
+      resources: [...(player.resources ?? [])],
+    })),
+    houseDemands: structuredClone(state.houseDemands ?? []),
+  }
+}
+
 function validateActions(actions) {
   if (!Array.isArray(actions) || actions.length < 1 || actions.length > 64) {
     throw invalidCommand('actions must contain 1..64 actions')
@@ -111,6 +125,44 @@ export class EngineRuntime {
     }
   }
 
+  async projectDinner(command) {
+    exactKeys(command, new Set(['snapshot', 'actor']), 'engine command')
+    exactKeys(command.actor, new Set(['name', 'seat']), 'actor')
+    const { name, seat } = command.actor
+    if (typeof name !== 'string' || !name || !Number.isInteger(seat) || seat < 0) {
+      throw invalidCommand('actor.name and actor.seat are required')
+    }
+    const snapshot = normalizeEngineSnapshot(command.snapshot)
+    if (snapshot.startingOptions.length > 0) {
+      throw codedError(
+        'UNSUPPORTED_RULESET',
+        'dinner projection currently supports base-game fixtures only',
+      )
+    }
+
+    const adapter = this.createAdapter()
+    await loadDeterministicSnapshot(adapter, snapshot, { actorName: name, actorSeat: seat })
+    const before = summarizeDinnerState(adapter.getState())
+    const projection = adapter.modules?.rules?.doDinnerTime?.(true)
+    if (!projection || !Array.isArray(projection.houses) || !Array.isArray(projection.playerIncome)) {
+      throw codedError('ENGINE_FAILURE', 'official dinner resolver returned no projection summary')
+    }
+    const houseNumbers = projection.houses.map((house) => house.house)
+    const sortedNumbers = [...houseNumbers].sort((a, b) => a - b)
+    if (JSON.stringify(houseNumbers) !== JSON.stringify(sortedNumbers)) {
+      throw codedError('ENGINE_FAILURE', 'official dinner projection is not in house-number order')
+    }
+    const after = summarizeDinnerState(adapter.getState())
+    return {
+      ...(await this.metadata()),
+      gameID: snapshot.id,
+      sourceVersion: snapshot.latestUpdate,
+      before,
+      projection: structuredClone(projection),
+      after,
+    }
+  }
+
   async executeBatch(command) {
     exactKeys(
       command,
@@ -155,7 +207,7 @@ export class EngineRuntime {
             throw invalidCommand('end_turn must be the final action')
           }
           const legal = adapter.getLegalActions(seat)
-          if (!legal.yourTurn || !legal.actions.some((item) => item.type === 'finish_turn')) {
+          if (!legal.yourTurn || !legal.actions.some((item) => item.type === 'end_turn')) {
             throw codedError('ILLEGAL_ACTION', 'the official rules do not allow ending this turn')
           }
           continue
