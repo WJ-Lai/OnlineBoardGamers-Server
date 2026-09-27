@@ -37,6 +37,27 @@ test('offline environment observes each seat and clones without shared mutable s
   assert.equal(calls[0].actor.name, 'b')
 })
 
+test('all environments serialize access to the shared global official-engine runtime', async () => {
+  let active = 0
+  let maxActive = 0
+  const runtime = {
+    async inspect(command) {
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      await new Promise((resolve) => setTimeout(resolve, 15))
+      active -= 1
+      return { state: { mySeat: command.actor.seat }, legalActions: { actions: [] } }
+    },
+  }
+  const parent = new OfflineEnvironment({ runtime, snapshot: snapshot() })
+  const left = parent.clone()
+  const independent = new OfflineEnvironment({ runtime, snapshot: snapshot() })
+
+  await Promise.all([left.observe(0), independent.observe(1), parent.observe(0)])
+
+  assert.equal(maxActive, 1)
+})
+
 test('offline environment buffers simultaneous moves then installs the official canonical save', async () => {
   let call = 0
   const runtime = {

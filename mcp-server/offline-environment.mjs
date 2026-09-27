@@ -1,4 +1,10 @@
 import { EngineRuntime } from './engine-runtime.mjs'
+import { SerialExecutor } from './serial-executor.mjs'
+
+// Pinia, the browser shims and the local transport are process-global. Every
+// environment in this process must therefore share one queue, not only clones
+// descended from the same parent.
+const OFFLINE_ENGINE_EXECUTOR = new SerialExecutor()
 
 function clone(value) {
   return structuredClone(value)
@@ -27,8 +33,13 @@ function acceptedMovePhases(phase) {
  * second representation of FCM rules. All transitions still execute official JS.
  */
 export class OfflineEnvironment {
-  constructor({ runtime = new EngineRuntime(), snapshot = null } = {}) {
+  constructor({
+    runtime = new EngineRuntime(),
+    snapshot = null,
+    executor = OFFLINE_ENGINE_EXECUTOR,
+  } = {}) {
     this.runtime = runtime
+    this._executor = executor
     this._snapshot = null
     this._moves = []
     if (snapshot) this.reset(snapshot)
@@ -80,7 +91,11 @@ export class OfflineEnvironment {
   }
 
   clone() {
-    const copy = new OfflineEnvironment({ runtime: this.runtime, snapshot: this._snapshot })
+    const copy = new OfflineEnvironment({
+      runtime: this.runtime,
+      snapshot: this._snapshot,
+      executor: this._executor,
+    })
     copy._moves = clone(this._moves)
     return copy
   }
@@ -93,7 +108,9 @@ export class OfflineEnvironment {
   }
 
   async observe(seat) {
-    return this.runtime.inspect({ snapshot: this._snapshot, actor: this._actor(seat) })
+    const snapshot = this.snapshot()
+    const actor = this._actor(seat)
+    return this._executor.run(() => this.runtime.inspect({ snapshot, actor }))
   }
 
   async legal(seat) {
@@ -101,53 +118,55 @@ export class OfflineEnvironment {
   }
 
   async step(seat, actions) {
-    const actor = this._actor(seat)
-    const before = this.snapshot()
-    const nextVersion = String(BigInt(before.latestUpdate) + 1n)
-    const result = await this.runtime.executeBatch({
-      snapshot: before,
-      actor,
-      expectedVersion: before.latestUpdate,
-      actions: clone(actions),
-      transportContext: {
-        existingMoves: this._moves,
-        pendingPlayerNames: before.currentPlayers ?? [],
-        acceptedPhases: acceptedMovePhases(before.phase),
-        nextVersion,
-        sideData: '',
-      },
+    return this._executor.run(async () => {
+      const actor = this._actor(seat)
+      const before = this.snapshot()
+      const nextVersion = String(BigInt(before.latestUpdate) + 1n)
+      const result = await this.runtime.executeBatch({
+        snapshot: before,
+        actor,
+        expectedVersion: before.latestUpdate,
+        actions: clone(actions),
+        transportContext: {
+          existingMoves: this._moves,
+          pendingPlayerNames: before.currentPlayers ?? [],
+          acceptedPhases: acceptedMovePhases(before.phase),
+          nextVersion,
+          sideData: '',
+        },
+      })
+
+      if (result.canonicalSave) {
+        const saved = result.canonicalSave
+        this._snapshot = {
+          ...before,
+          gameData: saved.gameData,
+          phase: saved.phase,
+          turn: saved.turn,
+          latestUpdate: nextVersion,
+          currentPlayers: [...(saved.nextPlayer ?? [])],
+          startingMap: saved.mapTiles ?? before.startingMap,
+          status: saved.status ?? before.status,
+          moveData: '',
+        }
+        this._moves = this._snapshot.playerNames.map((name) => [name, [-1], '', []])
+      } else if (result.simultaneousSubmission) {
+        this._moves = clone(result.simultaneousSubmission.moves)
+        this._snapshot = {
+          ...before,
+          latestUpdate: nextVersion,
+          currentPlayers: [...result.simultaneousSubmission.playersToMove],
+          moveData: '',
+        }
+      } else {
+        throw invalidEnvironment('official runtime returned no durable transition')
+      }
+
+      return {
+        before,
+        after: this.snapshot(),
+        engine: result,
+      }
     })
-
-    if (result.canonicalSave) {
-      const saved = result.canonicalSave
-      this._snapshot = {
-        ...before,
-        gameData: saved.gameData,
-        phase: saved.phase,
-        turn: saved.turn,
-        latestUpdate: nextVersion,
-        currentPlayers: [...(saved.nextPlayer ?? [])],
-        startingMap: saved.mapTiles ?? before.startingMap,
-        status: saved.status ?? before.status,
-        moveData: '',
-      }
-      this._moves = this._snapshot.playerNames.map((name) => [name, [-1], '', []])
-    } else if (result.simultaneousSubmission) {
-      this._moves = clone(result.simultaneousSubmission.moves)
-      this._snapshot = {
-        ...before,
-        latestUpdate: nextVersion,
-        currentPlayers: [...result.simultaneousSubmission.playersToMove],
-        moveData: '',
-      }
-    } else {
-      throw invalidEnvironment('official runtime returned no durable transition')
-    }
-
-    return {
-      before,
-      after: this.snapshot(),
-      engine: result,
-    }
   }
 }
