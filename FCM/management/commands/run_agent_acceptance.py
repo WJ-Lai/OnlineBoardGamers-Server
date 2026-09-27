@@ -3,6 +3,7 @@
 import json
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 from django.test import Client
@@ -19,6 +20,10 @@ class Command(BaseCommand):
         parser.add_argument("--owner", default="Vincent")
         parser.add_argument("--max-commands", type=int, default=500)
         parser.add_argument("--game-id", type=int)
+        parser.add_argument(
+            "--trace-dir",
+            help="Write one credential-free engine fixture per encountered phase/subphase",
+        )
 
     @staticmethod
     def _client():
@@ -37,6 +42,56 @@ class Command(BaseCommand):
         if response.status_code != 201:
             raise CommandError(f"cannot create {label}: {response.content!r}")
         return response.json()
+
+    @staticmethod
+    def _fixture_payload(snapshot, view):
+        state = view["state"]
+        phase = state["phase"]
+        subphase = state.get("subphase")
+        seat = state["mySeat"]
+        key = f"phase-{phase:02d}"
+        if subphase is not None:
+            subphase_label = f"{subphase:02d}" if isinstance(subphase, int) else str(subphase).replace(".", "_")
+            key += f"-subphase-{subphase_label}"
+        key += f"-seat-{seat:02d}"
+
+        safe_snapshot = dict(snapshot)
+        safe_snapshot["chatData"] = ""
+        safe_snapshot["moveData"] = ""
+        legal_types = sorted({
+            action.get("type") for action in view["legalActions"].get("actions", [])
+            if isinstance(action, dict) and isinstance(action.get("type"), str)
+        })
+        return key, {
+            "fixtureVersion": "fcm-engine-fixture-v1",
+            "key": key,
+            "snapshot": safe_snapshot,
+            "expected": {
+                "phase": phase,
+                "subphase": subphase,
+                "actorSeat": seat,
+                "sourceVersion": str(view["version"]),
+                "rulesetHash": view.get("rulesetHash", ""),
+                "legalActionTypes": legal_types,
+            },
+        }
+
+    def _capture_fixture(self, trace_dir, client, game_id, view, *, force=False):
+        if not trace_dir or (not force and not view["legalActions"].get("yourTurn")):
+            return
+        snapshot_response = client.get(f"/FCM/agent/v1/games/{game_id}/snapshot/")
+        if snapshot_response.status_code != 200:
+            raise CommandError(f"fixture snapshot failed: {snapshot_response.content!r}")
+        key, payload = self._fixture_payload(snapshot_response.json(), view)
+        if key in self._fixture_keys:
+            return
+        trace_dir.mkdir(parents=True, exist_ok=True)
+        target = trace_dir / f"{key}.json"
+        target.write_text(
+            json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        self._fixture_keys.add(key)
 
     @staticmethod
     def _pick_actions(view):
@@ -192,6 +247,8 @@ class Command(BaseCommand):
         return None
 
     def handle(self, *args, **options):
+        self._fixture_keys = set()
+        trace_dir = Path(options["trace_dir"]).expanduser().resolve() if options["trace_dir"] else None
         try:
             owner = User.objects.get(username=options["owner"])
         except User.DoesNotExist as error:
@@ -247,6 +304,11 @@ class Command(BaseCommand):
         while commands < options["max_commands"]:
             game = Game.objects.get(id=game_id)
             if game.gameStatus == "FINISHED" or game.phase == 10:
+                terminal = clients[0].get(f"/FCM/agent/v1/games/{game_id}/actions/")
+                if terminal.status_code == 200:
+                    self._capture_fixture(
+                        trace_dir, clients[0], game_id, terminal.json(), force=True,
+                    )
                 self.stdout.write(self.style.SUCCESS(
                     f"GAME_OVER game={game_id} commands={commands} turn={game.turn} "
                     f"url=http://127.0.0.1:8000/FCM/{game_id}/show/",
@@ -258,6 +320,7 @@ class Command(BaseCommand):
                 if inspected.status_code != 200:
                     raise CommandError(f"inspect failed: {inspected.content!r}")
                 view = inspected.json()
+                self._capture_fixture(trace_dir, client, game_id, view)
                 if not view["legalActions"]["yourTurn"]:
                     continue
                 actions = self._pick_actions(view)

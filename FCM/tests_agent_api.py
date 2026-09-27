@@ -17,6 +17,30 @@ from Lobby.models import Game, GamePlayer, User
 
 
 class FCMAcceptancePolicyTestCase(TestCase):
+    def test_fixture_payload_strips_private_transport_data_and_is_phase_keyed(self):
+        snapshot = {
+            "id": 9,
+            "mySeat": 2,
+            "chatData": "private chat",
+            "moveData": "private simultaneous move",
+            "gameData": "canonical blob",
+        }
+        view = {
+            "state": {"phase": 5, "subphase": 3, "mySeat": 2},
+            "legalActions": {"actions": [{"type": "marketing"}], "yourTurn": True},
+            "version": "44",
+            "rulesetHash": "a" * 64,
+        }
+
+        key, payload = AcceptanceCommand._fixture_payload(snapshot, view)
+
+        self.assertEqual(key, "phase-05-subphase-03-seat-02")
+        self.assertEqual(payload["snapshot"]["chatData"], "")
+        self.assertEqual(payload["snapshot"]["moveData"], "")
+        self.assertEqual(payload["expected"]["legalActionTypes"], ["marketing"])
+        self.assertNotIn("private chat", json.dumps(payload))
+        self.assertNotIn("private simultaneous move", json.dumps(payload))
+
     def test_restructuring_prioritizes_marketing_production_and_recruiting(self):
         view = {
             "state": {
