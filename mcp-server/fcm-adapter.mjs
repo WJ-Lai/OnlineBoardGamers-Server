@@ -408,7 +408,7 @@ export class FCMAdapter {
           legalSquares: rules.givePossibleStartingRestaurantsPosition(store.context.rotation ?? 0),
           hint: '选择餐厅位置（可选点位见 legalSquares）',
         })
-        out.actions.push({ type: 'finish_turn', hint: '结束放置' })
+        out.actions.push({ type: 'end_turn', hint: '结束放置' })
         break
 
       case 2: // Setup - Reserve Cards
@@ -417,7 +417,7 @@ export class FCMAdapter {
           cardValues: [-1, 1, 2, 3],
           hint: '选一张预备卡（3 = $20 档）',
         })
-        out.actions.push({ type: 'finish_turn', hint: '结束选卡' })
+        out.actions.push({ type: 'end_turn', hint: '结束选卡' })
         break
 
       case 3: // Setup - Turn Order / Restructuring（同时阶段：派工）
@@ -429,7 +429,7 @@ export class FCMAdapter {
           ).filter((i) => i !== null),
           hint: '把待命员工放进空槽（-1 表示空槽）',
         })
-        out.actions.push({ type: 'finish_turn', hint: '结束派工' })
+        out.actions.push({ type: 'end_turn', hint: '结束派工' })
         break
 
       case 4: // Order of Business
@@ -601,7 +601,7 @@ export class FCMAdapter {
 
           // 推进子阶段（官方 endWorkingDaySubphase）—— 没这步就到不了 TRAINING/MARKETING
           if (sp < 7) out.actions.push({ type: 'next_subphase', hint: `进入下一子阶段` })
-          out.actions.push({ type: 'finish_turn', hint: `结束子阶段（当前 ${out.subphaseName}）` })
+          out.actions.push({ type: 'end_turn', hint: `结束子阶段（当前 ${out.subphaseName}）` })
         }
         break
 
@@ -666,7 +666,7 @@ export class FCMAdapter {
     const rf = this.modules.reference
     const avail = store.availableEmployees ?? {}
     return Object.entries(avail)
-      .filter(([, n]) => n > 0)
+      .filter(([id, n]) => n > 0 && (rf.HIREABLE_EMPLOYEES ?? []).includes(Number(id)))
       .map(([id]) => ({ id: Number(id), name: rf.EMPLOYEES_STR?.[Number(id)] ?? String(id) }))
   }
 

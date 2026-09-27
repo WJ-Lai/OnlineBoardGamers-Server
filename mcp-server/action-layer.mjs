@@ -216,6 +216,9 @@ export class FCMActionLayer {
       }
 
       case ACTIONS.HIRE: {
+        if (!(rf.HIREABLE_EMPLOYEES ?? []).includes(spec.employee)) {
+          return fail(`员工 ${spec.employee} 不可直接招募；必须通过培训或其他官方规则获得`)
+        }
         const entry = legal.actions.find((a) => a.type === 'hire')
         const cand = (entry.candidates ?? []).find((c) => c.id === spec.employee)
         if (!cand) {

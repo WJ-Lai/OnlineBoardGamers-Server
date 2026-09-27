@@ -193,22 +193,19 @@ verification gates in section 8 before release.
 | Separate Agents | Every AI has a distinct passwordless OBG actor, identity, Token and seat. A Token can act only for its own memberships. | Implemented and tested |
 | Create-game handoff | Game creation returns both `gameURL` and `inviteURL`; bootstrap explicitly tells the Agent to return `inviteURL` to the requesting human. | Implemented and tested |
 | Friendly names | Human UI, structured Agent state and FCM history resolve internal Agent usernames to the owner's custom label. Engine commits translate presentation labels back to stable internal actors before validation. | Implemented and covered by runtime regression test |
-| Read decision information | Base-game state exposes the visible board, demands, public supply, bank/order, public player assets, history/chat and a rules catalog. Private temporary simultaneous choices are deliberately excluded. | Implemented; phase-by-phase parity fixture remains TODO |
-| Perform human operations | Base-game choices are exposed only through the action registry and are executed through existing FCM controller/rules functions. Automatic dinner/scoring phases are not rewritten. | Implemented; fresh mixed-game run reached Game Over after 293 commands |
+| Read decision information | Base-game state exposes the visible board, demands, public supply, bank/order, public player assets, history/chat and a rules catalog. Private temporary simultaneous choices are deliberately excluded. | Implemented; 35 immutable phase/subphase fixtures verify the official engine contract |
+| Perform human operations | Base-game choices are exposed only through the action registry and are executed through existing FCM controller/rules functions. Automatic dinner/scoring phases are not rewritten. | Implemented; post-game-69 fix mixed acceptance reached Game Over after 276 commands |
+| Human/Agent rule parity | Hire candidates and execution both use official `HIREABLE_EMPLOYEES`; legal-action output advertises public `end_turn`, never the rejected internal sentinel. | Implemented after game 69; adversarial bypass tests and full acceptance pass |
 | Expansion support | Authentication, transport, state envelope and registry are reusable. Expansion-only decisions are rejected unless they have their own legal-action adapter, executor and adversarial tests. | TODO after base-game release |
 | Connection method clarity | HTTP JSON API is canonical. The HTML page is only the human owner's control panel. MCP is an optional tool adapter; CLI is a maintainer/debug reference client. | Documented |
 | DeepSeek changes | The only unrelated detected change is local host configuration in `OnlineBoardGamers/settings.py`. It does not change FCM rules or Agent behavior and is intentionally excluded from the Agent commit. | Reviewed; preserve locally, do not submit |
 
 ### Remaining release tasks
 
-1. Rebase the Agent branch onto current upstream `d6cf592` (five upstream commits newer than the
-   accepted base), paying particular attention to upstream FCM sales-resolution fix `d3297b1`.
-2. Resolve conflicts without replacing upstream FCM rules, then re-run Node, targeted Django,
-   migration/build checks, the full suite comparison and a fresh mixed human/two-Agent game.
-3. Produce the tracked Vue runtime bundle from the rebased clean source, or add a reliable build
-   step. The current setup scripts install dependencies but do not build the bundle.
-4. Review the final diff to exclude Temporary Worker code, local host settings, secrets and
-   unrelated generated assets; then update the owner's fork and prepare the upstream PR.
+1. Rebuild and review the tracked Vue runtime bundle after the dinner-projection instrumentation.
+2. Review the final diff to exclude Temporary Worker code, local host settings, secrets and
+   unrelated generated assets, then push the rebased branch to the owner's fork.
+3. Keep strategy-AI work in `/home/vincent/fcm-ai`; it is not part of the upstream integration PR.
 
 ### Deferred expansion work
 
@@ -236,20 +233,26 @@ the OBG server. The detailed design is maintained in
 
 ### AI readiness backlog
 
-1. Add a machine-readable decision audit for every base-game phase: visible inputs, derived
+1. Keep the captured machine-readable fixtures for every base-game phase: visible inputs, derived
    features, legal candidates, hidden information and expected consequences.
-2. Expose or compute a semantic `DecisionView`: decoded company structure and board graph,
+2. Extract an early fast, cloneable offline environment around the official JS engine; benchmark
+   and candidate evaluation must not depend on HTTP/Django/SQLite.
+3. Expose or compute a semantic `DecisionView`: decoded company structure and board graph,
    effective price/salary, reachability, supplier scores, projected sales and milestone threats.
-3. Build a deterministic baseline Agent with persistent per-game strategy memory, phase-specific
-   candidate generation, tactical calculators and a documented evaluation function.
-4. Build an offline clone/simulation environment around the existing official FCM engine. It must
-   preserve simultaneous phases and must never expose hidden choices to the live Agent.
+4. Build a deterministic baseline Agent with persistent per-game strategy memory and bounded,
+   phase-local candidate generation. Use explicit expansion budgets, dominance pruning and a safe
+   fallback before composing one-turn or multi-turn plans.
 5. Add fixed scenario tests plus a league benchmark against random, first-legal, built-in OBG AI,
    scripted strategies and historical versions. Measure rule violations, win/rank rate, seat bias,
    decision latency and robustness—not just whether a game finishes.
-6. Use the LLM as a high-level planner, rules explainer and opponent-model narrator over a small
-   set of calculated candidates. Do not ask it to perform raw map arithmetic or remember the whole
-   rulebook from prose.
-7. Only after the simulator and baselines are reliable, evaluate imitation learning and self-play.
+6. Separate `observed`, official-engine `derived` and opponent-model `believed` fields. A frozen
+   public-state dinner projection is deterministic; future opponent reactions are not.
+7. Import consented human trajectories as seat-visible examples for playbooks and opponent-model
+   calibration; never ingest credentials or unrevealed simultaneous choices.
+8. Use the LLM only as a selector over validated near-tie candidates. Require paired-seed/seat A/B
+   evidence of win/rank lift after cost and latency; remove it if it adds no measurable value.
+9. Only after the simulator and baselines are reliable, evaluate imitation learning and self-play.
    PPO is an experiment, not the default architecture; its viability depends on hierarchical
-   action masking, stable observations, a well-designed reward and a population of opponents.
+   action masking, stable observations, a well-designed reward and a population of opponents. If
+   potential-difference shaping is used, its evaluator must be frozen and held-out calibrated, and
+   promotion still uses raw win/rank metrics.

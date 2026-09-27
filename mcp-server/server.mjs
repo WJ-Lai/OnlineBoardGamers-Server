@@ -374,7 +374,7 @@ export async function handleTool(name, args = {}) {
         if (args.action.type === 'end_turn') {
           if (args.dryRun) {
             const legal = adapter.getLegalActions()
-            const allowed = legal.actions.some((action) => action.type === 'finish_turn')
+            const allowed = legal.actions.some((action) => action.type === 'end_turn')
             return {
               dryRun: true, legal: allowed,
               reason: allowed ? null : '当前阶段不允许结束回合',

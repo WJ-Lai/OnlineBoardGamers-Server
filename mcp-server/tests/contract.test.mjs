@@ -215,6 +215,53 @@ test('working day never exposes restructuring-only employee placement', () => {
   assert.equal(legal.actions.some((action) => action.type === 'place_employees'), false)
 })
 
+test('hire candidates use the official hireable whitelist and expose public end_turn', () => {
+  const adapter = new FCMAdapter({})
+  adapter.playerIndex = 0
+  adapter.modules = {
+    storeMod: { useModelStore: () => ({
+      gameflow: { phase: 5, subphase: 1, turnOrder: [0] },
+      context: {},
+      players: [{ employees: [], beach: [17] }],
+      availableEmployees: { 23: 2, 24: 6, 30: 6 },
+    }) },
+    controller: { isSimulPhase: () => false },
+    reference: {
+      HIREABLE_EMPLOYEES: [23],
+      EMPLOYEES_STR: { 23: 'Errand Boy', 24: 'Cart Operator', 30: 'Pizza Cook' },
+    },
+    rules: { getRemainingRecruitingPoints: () => 1 },
+  }
+
+  const legal = adapter.getLegalActions(0)
+  const hire = legal.actions.find((action) => action.type === 'hire')
+  assert.deepEqual(hire.candidates, [{ id: 23, name: 'Errand Boy' }])
+  assert.equal(legal.actions.some((action) => action.type === 'end_turn'), true)
+  assert.equal(legal.actions.some((action) => action.type === 'finish_turn'), false)
+})
+
+test('hire execution rechecks the official whitelist even if candidates are forged', () => {
+  const layer = new FCMActionLayer({
+    getStore: () => ({ gameflow: { phase: 5, subphase: 1 } }),
+    modules: {
+      reference: { HIREABLE_EMPLOYEES: [23] },
+      rules: { getRemainingRecruitingPoints: () => 1 },
+    },
+    adapter: { playerIndex: 0 },
+  })
+  const verdict = layer._checkLegal(
+    { type: 'hire', employee: 24 },
+    {
+      yourTurn: true,
+      currentPlayerIndex: 0,
+      actions: [{ type: 'hire', candidates: [{ id: 24, name: 'Cart Operator' }] }],
+    },
+    0,
+  )
+  assert.equal(verdict.ok, false)
+  assert.match(verdict.reason, /不可直接招募/)
+})
+
 test('marketing exposes complete atomic campaign choices instead of a placeholder', () => {
   const adapter = new FCMAdapter({})
   adapter.playerIndex = 0
