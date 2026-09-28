@@ -287,6 +287,7 @@ export class FCMAdapter {
       rules: this.modules.rules,
       player: this.modules.player,
       model: this.modules.model,
+      map: this.modules.map,
       reference: rf,
     })
     const describe = (items, ids) => (ids ?? []).map((id) => ({

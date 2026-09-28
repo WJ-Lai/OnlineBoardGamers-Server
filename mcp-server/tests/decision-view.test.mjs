@@ -21,6 +21,14 @@ test('economic view delegates prices, salary, slots and capacities to official f
     MARKETERS: [17],
     PRODUCERS: [13],
     CAN_BUILD_RESTAURANT: [21],
+    TRAINABLE_BASE: [13],
+    REQUIRE_SALARY: [17, 21],
+    RECRUITING_GIRL: 17,
+    RECRUITING_MANAGER: 18,
+    HR_DIRECTOR: 19,
+    TRAINER: 20,
+    COACH: 21,
+    GURU: 22,
   }
   const rules = {
     getSubSlotsForEmployee(employee) { calls.push(['subslots', employee]); return employee === 5 ? 2 : 0 },
@@ -68,6 +76,20 @@ test('economic view delegates prices, salary, slots and capacities to official f
     freeSlots: 1,
     salary: { due: 15, employeeIds: [17, 13] },
     price: { unit: 9, discount: 1 },
+    pipeline: {
+      active: {
+        management: 1, recruiting: 1, training: 0, marketing: 1,
+        production: 0, restaurantBuilding: 0, trainable: 0, salaryLiable: 1,
+      },
+      beach: {
+        management: 0, recruiting: 0, training: 0, marketing: 0,
+        production: 1, restaurantBuilding: 0, trainable: 1, salaryLiable: 0,
+      },
+      owned: {
+        management: 1, recruiting: 1, training: 0, marketing: 1,
+        production: 1, restaurantBuilding: 0, trainable: 1, salaryLiable: 1,
+      },
+    },
     capacities: {
       recruiting: { total: 3, salaryDiscountPoints: 2 },
       training: { total: 4, level2: 1, level3: 0, unlimited: false },
@@ -122,6 +144,9 @@ test('strategic threats expose milestone windows and public house competition vi
     },
     hasGarden: (house) => house === 18,
   }
+  const map = {
+    findAllHouses() { calls.push(['allHouses']); return [21, 3, 18] },
+  }
   const player = {
     playerHasResources(seat, goods) {
       calls.push(['stock', seat, goods])
@@ -143,7 +168,7 @@ test('strategic threats expose milestone windows and public house competition vi
   }
 
   const before = structuredClone(store)
-  const result = buildStrategicThreats({ store, rules, player, model, reference })
+  const result = buildStrategicThreats({ store, rules, player, model, map, reference })
 
   assert.deepEqual(store, before)
   assert.deepEqual(result.milestones, [
@@ -175,14 +200,16 @@ test('strategic threats expose milestone windows and public house competition vi
   assert.equal(result.market.houses[1].contested, false)
   assert.deepEqual(result.market.houses[1].tiers[1].suppliers.map((item) => item.seat), [0, 1])
   assert.deepEqual(result.reachability, {
-    scope: 'all-built-houses-before-demand-and-inventory',
+    scope: 'all-map-houses-before-demand-and-inventory',
     houses: [
       { house: 3, restaurantDistances: [-99, 1, -99], reachableSeats: [1] },
       { house: 18, restaurantDistances: [3, 2, -99], reachableSeats: [0, 1] },
+      { house: 21, restaurantDistances: [-99, 1, -99], reachableSeats: [1] },
     ],
   })
   assert.ok(calls.some((entry) => entry[0] === 'tiers'))
   assert.ok(calls.some((entry) => entry[0] === 'distances'))
+  assert.ok(calls.some((entry) => entry[0] === 'allHouses'))
 })
 
 test('strategic threats fail closed when an authoritative market function is absent', () => {

@@ -33,6 +33,31 @@ export function buildEconomicPlayers({ store, rules, player, controller, referen
   if (!Number.isInteger(blank)) throw unavailable('BLANK_EMPLOYEE_SPACE')
   const marketerTypes = new Set(reference?.MARKETERS ?? [])
   const builderTypes = new Set(reference?.CAN_BUILD_RESTAURANT ?? [])
+  const familySet = (name) => {
+    const values = reference?.[name]
+    if (!Array.isArray(values)) throw unavailable(name)
+    return new Set(values)
+  }
+  const familySets = {
+    management: familySet('MANAGERS'),
+    marketing: marketerTypes,
+    production: familySet('PRODUCERS'),
+    restaurantBuilding: builderTypes,
+    trainable: familySet('TRAINABLE_BASE'),
+    salaryLiable: familySet('REQUIRE_SALARY'),
+  }
+  const requiredIds = (names) => names.map((name) => {
+    const value = reference?.[name]
+    if (!Number.isInteger(value)) throw unavailable(name)
+    return value
+  })
+  familySets.recruiting = new Set(requiredIds([
+    'RECRUITING_GIRL', 'RECRUITING_MANAGER', 'HR_DIRECTOR',
+  ]))
+  familySets.training = new Set(requiredIds(['TRAINER', 'COACH', 'GURU']))
+  const familyCounts = (employeeIds) => Object.fromEntries(Object.entries(familySets).map(
+    ([name, members]) => [name, employeeIds.filter((employee) => members.has(employee)).length],
+  ))
 
   return (store?.players ?? []).map((playerObject, seat) => {
     const employees = [...(playerObject.employees ?? [])]
@@ -56,6 +81,8 @@ export function buildEconomicPlayers({ store, rules, player, controller, referen
         maxDuration: campaignDuration(employee),
       }))
     const trainingCapacity = training(seat, [])
+    const beach = [...(playerObject.beach ?? [])]
+    const owned = [...active, ...beach]
 
     return {
       seat,
@@ -81,6 +108,11 @@ export function buildEconomicPlayers({ store, rules, player, controller, referen
       price: {
         unit: price(seat),
         discount: discount(seat),
+      },
+      pipeline: {
+        active: familyCounts(active),
+        beach: familyCounts(beach),
+        owned: familyCounts(owned),
       },
       capacities: {
         recruiting: {
@@ -110,7 +142,7 @@ export function buildEconomicPlayers({ store, rules, player, controller, referen
  * the public position right now?" Every rules-sensitive calculation is delegated to the loaded
  * official engine.
  */
-export function buildStrategicThreats({ store, rules, player, model, reference }) {
+export function buildStrategicThreats({ store, rules, player, model, map, reference }) {
   const priorityTiers = official(rules, 'selectNeedsPriority')
   const adjustDistances = official(rules, 'adjustDistanceForMilestones')
   const turnOrderPosition = official(rules, 'getPlaceInFullTurnOrderForPlayer')
@@ -120,6 +152,7 @@ export function buildStrategicThreats({ store, rules, player, model, reference }
   const price = official(player, 'playersPrice')
   const waitresses = official(player, 'numberOfWaitress')
   const musicians = official(player, 'numberOfMusicians')
+  const findAllHouses = official(map, 'findAllHouses')
 
   const milestoneIds = [...(store?.availableMilestones ?? [])]
   const milestoneSet = new Set(milestoneIds)
@@ -183,7 +216,10 @@ export function buildStrategicThreats({ store, rules, player, model, reference }
       }
     })
 
-  const reachabilityHouses = [...new Set((store?.houses ?? []).map((house) => house.number))]
+  const reachabilityHouses = [...new Set([
+    ...findAllHouses(),
+    ...(store?.houses ?? []).map((house) => house.number),
+  ])]
     .sort((a, b) => a - b)
     .map((house) => {
       const restaurantDistances = [...restaurantRanges(house)]
@@ -209,7 +245,7 @@ export function buildStrategicThreats({ store, rules, player, model, reference }
       houses,
     },
     reachability: {
-      scope: 'all-built-houses-before-demand-and-inventory',
+      scope: 'all-map-houses-before-demand-and-inventory',
       houses: reachabilityHouses,
     },
   }
