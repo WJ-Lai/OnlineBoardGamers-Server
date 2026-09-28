@@ -289,6 +289,10 @@ price and tie-break inputs to list current suppliers. This view is deliberately 
 house: it neither predicts a winner nor models sequential inventory consumption. Exact dinner
 resolution remains exclusively in the isolated official `projectDinner` operation. Missing
 official functions fail closed, and hidden simultaneous choices are never inspected.
+The same section now includes a demand-independent `reachability` table for every built house,
+using the official restaurant-range calculation. It exposes each public seat's current distance
+before anyone chooses a new campaign, so an Agent can avoid creating demand that only a closer
+opponent can profitably serve; it does not predict future hidden actions.
 
 The public-human replay ladder in `/home/vincent/fcm-ai` has reached 100 base-standard games.
 Across 14,078 seat decision boundaries, 10,001 labels execute exactly through this adapter and the

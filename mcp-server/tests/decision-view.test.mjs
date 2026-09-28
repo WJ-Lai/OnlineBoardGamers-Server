@@ -102,6 +102,7 @@ test('strategic threats expose milestone windows and public house competition vi
       { number: 18, needs: [[4, -1], [4, -1]] },
       { number: 3, needs: [[3, -1]] },
     ],
+    houses: [{ number: 3 }, { number: 18 }],
   }
   const rules = {
     selectNeedsPriority(goods, garden) {
@@ -173,6 +174,13 @@ test('strategic threats expose milestone windows and public house competition vi
   assert.deepEqual(result.market.houses[1].eligibleSupplierSeats, [0])
   assert.equal(result.market.houses[1].contested, false)
   assert.deepEqual(result.market.houses[1].tiers[1].suppliers.map((item) => item.seat), [0, 1])
+  assert.deepEqual(result.reachability, {
+    scope: 'all-built-houses-before-demand-and-inventory',
+    houses: [
+      { house: 3, restaurantDistances: [-99, 1, -99], reachableSeats: [1] },
+      { house: 18, restaurantDistances: [3, 2, -99], reachableSeats: [0, 1] },
+    ],
+  })
   assert.ok(calls.some((entry) => entry[0] === 'tiers'))
   assert.ok(calls.some((entry) => entry[0] === 'distances'))
 })

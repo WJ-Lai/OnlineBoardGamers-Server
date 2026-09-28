@@ -183,16 +183,34 @@ export function buildStrategicThreats({ store, rules, player, model, reference }
       }
     })
 
+  const reachabilityHouses = [...new Set((store?.houses ?? []).map((house) => house.number))]
+    .sort((a, b) => a - b)
+    .map((house) => {
+      const restaurantDistances = [...restaurantRanges(house)]
+      return {
+        house,
+        restaurantDistances,
+        reachableSeats: restaurantDistances
+          .map((distance, seat) => distance === -99 ? null : seat)
+          .filter(Number.isInteger),
+      }
+    })
+
   return {
     provenance: {
       milestones: 'observed-public-official-store',
       market: 'official-engine-derived-current-inventory-per-house',
+      reachability: 'official-engine-derived-public-map-distance',
       exactDinnerResolution: 'projectDinner',
     },
     milestones,
     market: {
       scope: 'independent-per-house-before-sequential-inventory-consumption',
       houses,
+    },
+    reachability: {
+      scope: 'all-built-houses-before-demand-and-inventory',
+      houses: reachabilityHouses,
     },
   }
 }

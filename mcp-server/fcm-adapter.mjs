@@ -654,6 +654,7 @@ export class FCMAdapter {
             resources,
             hasFridge,
             requiresFridgeChoice,
+            kimchiResource: requiresFridgeChoice ? this.modules.reference?.KIMCHI : null,
             minimumDiscardCount: hasFridge ? Math.max(0, resources.length - 10) : 0,
           })
         }
