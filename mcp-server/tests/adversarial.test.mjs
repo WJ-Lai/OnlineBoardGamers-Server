@@ -83,7 +83,7 @@ function actionLayerForValidation(store) {
     getStore: () => store,
     modules: {
       rules: {},
-      reference: { BLANK_EMPLOYEE_SPACE: -1 },
+      reference: { BLANK_EMPLOYEE_SPACE: -1, MANAGERS: [] },
     },
     adapter: { playerIndex: 0 },
   })
@@ -555,6 +555,30 @@ test('employee placement cannot clone more copies of an employee than the player
     { type: 'place_employees', employees: [2, 2], slots: [0, 1] }, legal, 0,
   )
   assert.equal(verdict.ok, false)
+})
+
+test('employee placement accepts subordinate slots created earlier in the same batch', () => {
+  const store = {
+    gameflow: { phase: 3 },
+    players: [{ beach: [5, 20, 13, 27, 0], employees: [-1, -1, -1] }],
+  }
+  const layer = new FCMActionLayer({
+    getStore: () => store,
+    modules: {
+      rules: { getSubSlotsForEmployee: (employee) => employee === 5 ? 2 : 0 },
+      reference: { BLANK_EMPLOYEE_SPACE: -1, MANAGERS: [5] },
+    },
+    adapter: { playerIndex: 0 },
+  })
+  const legal = { yourTurn: true, actions: [{ type: 'place_employees' }] }
+  assert.equal(layer._checkLegal({
+    type: 'place_employees',
+    employees: [5, 20, 13, 27, 0],
+    slots: [0, 1, 2, 3, 4],
+  }, legal, 0).ok, true)
+  assert.equal(layer._checkLegal({
+    type: 'place_employees', employees: [20], slots: [3],
+  }, legal, 0).ok, false)
 })
 
 test('training rejects forged origin and forged training cost', () => {

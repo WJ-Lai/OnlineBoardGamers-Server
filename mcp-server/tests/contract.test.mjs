@@ -439,6 +439,42 @@ test('production separates route collectors from direct producers', () => {
   ])
 })
 
+test('training candidates expose the human hire-and-train source only with recruiting points', () => {
+  const adapter = new FCMAdapter({})
+  adapter.playerIndex = 0
+  const store = {
+    gameflow: { phase: 5, subphase: 2, turnOrder: [0] },
+    context: { justHired: [], justTrained: [] },
+    players: [{ beach: [5], employees: [6] }],
+    availableEmployees: {},
+  }
+  adapter.modules = {
+    storeMod: { useModelStore: () => store },
+    controller: { isSimulPhase: () => false },
+    reference: { EMPLOYEES_STR: [], FIRST_LEMONADE_SOLD: 99, HIREABLE_EMPLOYEES: [17, 20] },
+    player: { hasMilestone: () => false },
+    rules: {
+      getTrainingPoints: () => ({ total: 1, level2: 0, level3: 0, unlimited: false }),
+      getRemainingRecruitingPoints: () => 1,
+      possibleUpgrades: (_available, _seat, employee) => (
+        Array.isArray(employee) ? [[6, 21]] : [[employee + 1]]
+      ),
+    },
+  }
+
+  const training = adapter.getLegalActions(0).actions.find((action) => action.type === 'train')
+  assert.deepEqual(training.available.map(({ id, origin }) => ({ id, origin })), [
+    { id: 5, origin: 0 },
+    { id: -1, origin: 1 },
+  ])
+
+  adapter.modules.rules.getRemainingRecruitingPoints = () => 0
+  const withoutRecruitingPoint = adapter.getLegalActions(0).actions.find(
+    (action) => action.type === 'train',
+  )
+  assert.equal(withoutRecruitingPoint.available.some((candidate) => candidate.origin === 1), false)
+})
+
 test('pizza milestone exposes only road-adjacent radio positions for its owner', () => {
   const adapter = new FCMAdapter({})
   adapter.playerIndex = 1

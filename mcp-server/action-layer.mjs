@@ -281,11 +281,6 @@ export class FCMActionLayer {
         if (new Set(spec.slots).size !== spec.slots.length) {
           return fail('slots 不能包含重复位置')
         }
-        for (const slot of spec.slots) {
-          if (!Number.isInteger(slot) || slot < 0 || slot >= shop.employees.length) {
-            return fail(`槽位 ${slot} 超出范围 (0..${shop.employees.length - 1})`)
-          }
-        }
 
         const ownedCounts = new Map()
         for (const employee of [...shop.beach, ...shop.employees]) {
@@ -298,6 +293,34 @@ export class FCMActionLayer {
           requestedCounts.set(e, (requestedCounts.get(e) ?? 0) + 1)
           if ((requestedCounts.get(e) ?? 0) > (ownedCounts.get(e) ?? 0)) {
             return fail(`员工 ${e} 的放置数量超过实际拥有数量`)
+          }
+        }
+
+        // Managers create subordinate slots as they are placed. Validate in the same
+        // order as _apply/setEmployeeInIndex instead of freezing capacity at the
+        // pre-action CEO slots; otherwise a legal complete hierarchy is rejected.
+        const simulated = [...shop.employees]
+        const managers = new Set(rf.MANAGERS ?? [])
+        for (let i = 0; i < spec.slots.length; i++) {
+          const slot = spec.slots[i]
+          const employee = ids[i]
+          if (!Number.isInteger(slot) || slot < 0 || slot >= simulated.length) {
+            return fail(`槽位 ${slot} 超出当前结构范围 (0..${simulated.length - 1})`)
+          }
+          const returnee = simulated[slot]
+          if (returnee !== rf.BLANK_EMPLOYEE_SPACE && managers.has(returnee)) {
+            let toRemove = rules.getSubSlotsForEmployee?.(returnee) ?? 0
+            for (let j = simulated.length - 1; j >= 0 && toRemove > 0; j--) {
+              if (simulated[j] === rf.BLANK_EMPLOYEE_SPACE) {
+                simulated.splice(j, 1)
+                toRemove--
+              }
+            }
+          }
+          simulated[slot] = employee
+          if (managers.has(employee)) {
+            const added = rules.getSubSlotsForEmployee?.(employee) ?? 0
+            simulated.push(...Array(added).fill(rf.BLANK_EMPLOYEE_SPACE))
           }
         }
         return { ok: true }

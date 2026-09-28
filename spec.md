@@ -197,6 +197,8 @@ verification gates in section 8 before release.
 | Read decision information | Base-game state exposes the visible board, demands, public supply, bank/order, public player assets, history/chat and a rules catalog. Private temporary simultaneous choices are deliberately excluded. | Implemented; 35 immutable phase/subphase fixtures verify the official engine contract |
 | Perform human operations | Base-game choices are exposed only through the action registry and are executed through existing FCM controller/rules functions. Automatic dinner/scoring phases are not rewritten. | Implemented; post-game-69 fix mixed acceptance reached Game Over after 276 commands |
 | Human/Agent rule parity | Hire candidates and execution both use official `HIREABLE_EMPLOYEES`; legal-action output advertises public `end_turn`, never the rejected internal sentinel. | Implemented after game 69; adversarial bypass tests and full acceptance pass |
+| Training parity | Training exposes beach, permitted at-work staff and the human UI's synthetic hire-and-train source (`origin=1`) only while both recruiting and training points remain. | Implemented and adversarially tested |
+| Restructuring hierarchy parity | One atomic structure command may place a manager and then use subordinate slots created by that manager. Validation simulates the ordered official mutations while still rejecting cloning and out-of-range slots. | Implemented after public-history replay exposed the gap |
 | Expansion support | Authentication, transport, state envelope and registry are reusable. Expansion-only decisions are rejected unless they have their own legal-action adapter, executor and adversarial tests. | TODO after base-game release |
 | Connection method clarity | HTTP JSON API is canonical. The HTML page is only the human owner's control panel. MCP is an optional tool adapter; CLI is a maintainer/debug reference client. | Documented |
 | DeepSeek changes | The only unrelated detected change is local host configuration in `OnlineBoardGamers/settings.py`. It does not change FCM rules or Agent behavior and is intentionally excluded from the Agent commit. | Reviewed; preserve locally, do not submit |
@@ -287,6 +289,12 @@ price and tie-break inputs to list current suppliers. This view is deliberately 
 house: it neither predicts a winner nor models sequential inventory consumption. Exact dinner
 resolution remains exclusively in the isolated official `projectDinner` operation. Missing
 official functions fail closed, and hidden simultaneous choices are never inspected.
+
+The public-human replay ladder in `/home/vincent/fcm-ai` has reached 100 base-standard games.
+Across 14,078 seat decision boundaries, 10,001 labels execute exactly through this adapter and the
+official controller. Lossy production/payday histories and 536 known legacy-version mismatches are
+quarantined rather than taught as actions. This validates the base action surface at scale; it does
+not add expansion actions or replace the still-pending consented live-human exporter.
 
 PPO is an experiment, not the default architecture; its viability depends on hierarchical
    action masking, stable observations, a well-designed reward and a population of opponents. If

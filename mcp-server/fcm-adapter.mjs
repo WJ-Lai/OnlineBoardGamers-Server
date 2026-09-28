@@ -716,8 +716,9 @@ export class FCMAdapter {
     const justTrainedTo = (store.context.justTrained ?? []).map((x) => x.to)
     const out = []
 
-    const collect = (emp, fromActive) => {
+    const collect = (emp, origin) => {
       if (emp < 0 || typeof emp !== 'number') return
+      const fromActive = origin === 2
       const levels = rules.possibleUpgrades(
           store.availableEmployees, playerIndex, emp,
           td.total ?? 0, td.level2 ?? 0, td.level3 ?? 0, td.unlimited ?? false,
@@ -733,7 +734,7 @@ export class FCMAdapter {
       out.push({
         id: emp,
         name: rf.EMPLOYEES_STR?.[emp] ?? String(emp),
-        origin: fromActive ? 2 : 0,
+        origin,
         upgrades: [...upgradesById].map(([id, steps]) => ({
           id,
           steps,
@@ -743,12 +744,39 @@ export class FCMAdapter {
     }
 
     // beach（待命）所有人都可能可培训
-    for (const e of p.beach ?? []) collect(e, false)
+    for (const e of p.beach ?? []) collect(e, 0)
+    // The human UI may spend a remaining recruiting point to train directly from
+    // the hireable pool. History records this synthetic source as -1.
+    if ((rules.getRemainingRecruitingPoints?.(playerIndex) ?? 0) > 0 && (td.total ?? 0) > 0) {
+      const levels = rules.possibleUpgrades(
+        store.availableEmployees, playerIndex, rf.HIREABLE_EMPLOYEES ?? [],
+        td.total ?? 0, td.level2 ?? 0, td.level3 ?? 0, td.unlimited ?? false,
+        justTrainedTo, false,
+      )
+      const upgradesById = new Map()
+      levels.forEach((level, levelIndex) => {
+        for (const id of level ?? []) {
+          if (!upgradesById.has(id)) upgradesById.set(id, levelIndex + 1)
+        }
+      })
+      if (upgradesById.size) {
+        out.push({
+          id: -1,
+          name: 'hire-and-train',
+          origin: 1,
+          upgrades: [...upgradesById].map(([id, steps]) => ({
+            id,
+            steps,
+            name: rf.EMPLOYEES_STR?.[id] ?? String(id),
+          })),
+        })
+      }
+    }
     // 已上岗的只有在拿到「Lemonade 里程碑」后才允许在职培训（官方规则）
     const canTrainAtWork = this.modules.player?.hasMilestone?.(
       playerIndex, rf.FIRST_LEMONADE_SOLD,
     )
-    if (canTrainAtWork) for (const e of p.employees ?? []) collect(e, true)
+    if (canTrainAtWork) for (const e of p.employees ?? []) collect(e, 2)
 
     return out
   }
