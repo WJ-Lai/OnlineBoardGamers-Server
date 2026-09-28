@@ -165,6 +165,33 @@ archive. It must be maintained on a separate private branch or fork and rebased 
 
 Not required for the first controlled-network PAT contribution:
 
+**Agent product-surface items (logged 2026-09-28, not urgent, do not forget):**
+
+- **A. Per-game "allow AI players" toggle at game creation.** When a human creates an FCM game,
+  they must be able to choose whether AI players may join. Rationale: some players want
+  human-only games, and today such a room cannot exist — an Agent can join any game. Without this
+  flag there is no room type that excludes Agents, which overrides the host's preference. Design
+  questions to settle when picked up: is the flag per-game or an account-level default; does a
+  human-only game reject `join` outright or silently omit it from Agent-visible game lists; what
+  happens to a game created before the flag existed (default to allowed for backward
+  compatibility); and does the flag need to be visible on the game page and invite link.
+- **B. Agent-creation page must state which games Agents currently support.** The human-facing
+  Agent creation/management page needs an explicit notice that an Agent currently supports
+  **FCM only** and that other games are not supported yet. Rationale: without it, users reasonably
+  assume a created Agent works everywhere, then hit silent failures in other games. Keep wording in
+  the same place a user reads before committing to create an Agent, not buried in docs.
+- **C. Agent management page must show all three game states, not just in-progress.**
+  Today the expanded card lists only that AI's non-finished FCM games. It must also list
+  **waiting/pending** games (AI has joined or been invited but play has not started, or it is
+  waiting for other seats) and **finished** games. Rationale: a user checking "what is my Agent
+  doing" currently cannot tell whether an Agent is sitting idle waiting for opponents, which is
+  the state most likely to need human action (e.g. sending the invite link). Finished games matter
+  for reviewing results. Design questions: whether to group/section the three states in one card
+  or use tabs; how many finished games to show and whether pagination is needed; and whether a
+  waiting game links to its invite URL so the owner can act directly.
+
+Also not required for the first controlled-network PAT contribution:
+
 - UI/headless serialized-state parity fixtures for every expansion phase;
 - an explicit game allowlist and configurable rate limiting;
 - 100-write load tests and operational metrics;
@@ -185,7 +212,9 @@ verification gates in section 8 before release.
 |---|---|---|
 | Simple owner page | The page lists only AI players owned by the signed-in human. Installation commands, downloads, expiry, permission, revoke and disable controls are absent. | Implemented; live browser smoke passed |
 | One card per AI | Each custom-named AI appears as one collapsible card. Internal usernames are not shown to normal users. | Implemented |
-| Current games | An expanded card lists that AI's non-finished FCM games; each title links to `/FCM/{id}/show/`. | Implemented |
+| Current games | An expanded card lists that AI's non-finished FCM games; each title links to `/FCM/{id}/show/`. | Implemented — **TODO: also show waiting and finished games (roadmap item C)** |
+| AI opt-out for human-only games | No way today for a game host to exclude AI players; an Agent can join any game. Needs a per-game "allow AI players" creation flag. | **TODO (roadmap item A)** |
+| Supported-games notice | Agent creation page does not yet state that Agents currently support FCM only. | **TODO (roadmap item B)** |
 | Exactly one permanent Token | A database constraint permits one credential per identity. New Tokens have no expiry and full FCM capability. | Implemented and migration added |
 | Mask, reveal and copy | The page shows the beginning/end only. Eye reveal and Copy Token fetch the full value through an owner-only, non-cacheable endpoint. Copy works without first revealing it. | Implemented; live reveal/copy smoke passed |
 | Refresh forgotten Token | Refresh atomically replaces the sole Token. The old value stops working; identity, player account, game memberships and history remain unchanged. | Implemented and adversarially tested |
