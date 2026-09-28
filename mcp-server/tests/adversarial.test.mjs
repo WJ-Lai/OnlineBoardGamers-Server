@@ -133,6 +133,51 @@ test('second restaurant setup round is writable through the same rule gate', asy
   assert.equal(result.legal, true)
 })
 
+test('restaurant setup validates and applies the requested human-visible rotation', async () => {
+  const calls = []
+  const store = {
+    gameflow: { phase: 0 },
+    context: { rotation: 0 },
+    players: [{ restaurants: [] }],
+  }
+  const layer = new FCMActionLayer({
+    getStore: () => store,
+    modules: {
+      rules: {
+        givePossibleStartingRestaurantsPosition(rotation) {
+          return rotation === 1 ? [84] : [42]
+        },
+      },
+      model: {
+        addRestaurant(seat, index, rotation, open) {
+          calls.push({ seat, index, rotation, open })
+        },
+      },
+    },
+    adapter: {
+      playerIndex: 0,
+      getLegalActions: () => ({
+        yourTurn: true,
+        currentPlayerIndex: 0,
+        phaseName: 'Setup - Restaurants Round 1',
+        actions: [{ type: 'place_restaurant' }],
+      }),
+    },
+  })
+
+  const rejected = await layer.execute(
+    { type: 'place_restaurant', index: 42, rotation: 1 },
+    { playerIndex: 0, dryRun: true },
+  )
+  assert.equal(rejected.legal, false)
+  await layer.execute(
+    { type: 'place_restaurant', index: 84, rotation: 1 },
+    { playerIndex: 0, save: false },
+  )
+  assert.deepEqual(calls, [{ seat: 0, index: 84, rotation: 1, open: true }])
+  assert.equal(store.context.rotation, 1)
+})
+
 test('payday plan rejects missing coverage and non-candidate employees', async () => {
   const store = {
     gameflow: { phase: 7 },

@@ -144,7 +144,13 @@ test('second restaurant setup round exposes the same placement action as round o
     type: 'place_restaurant',
     rotation: 2,
     legalSquares: [12, 18],
-    hint: '选择餐厅位置（可选点位见 legalSquares）',
+    placements: [
+      { rotation: 0, legalSquares: [12, 18] },
+      { rotation: 1, legalSquares: [12, 18] },
+      { rotation: 2, legalSquares: [12, 18] },
+      { rotation: 3, legalSquares: [12, 18] },
+    ],
+    hint: '选择餐厅旋转方向和位置（所有合法组合见 placements）',
   })
 })
 

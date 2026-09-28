@@ -201,12 +201,14 @@ export class FCMActionLayer {
       case ACTIONS.PLACE_RESTAURANT: {
         // 与 MapHighlight.vue 的 setup 分支完全一致：
         //   model.addRestaurant(currentPlayerIndex(), index, rotation, true)
-        const allowed = rules.givePossibleStartingRestaurantsPosition(
-          this.store.context.rotation ?? 0,
-        )
+        const rotation = spec.rotation ?? this.store.context.rotation ?? 0
+        if (!Number.isInteger(rotation) || rotation < 0 || rotation > 3) {
+          return fail('餐厅 rotation 必须是 0..3 的整数')
+        }
+        const allowed = rules.givePossibleStartingRestaurantsPosition(rotation)
         if (!allowed.includes(spec.index)) {
           return fail(
-            `位置 ${spec.index} 不是合法开局点位（当前旋转 ${this.store.context.rotation ?? 0}）`,
+            `位置 ${spec.index} 不是合法开局点位（旋转 ${rotation}）`,
           )
         }
         if (this.store.players[playerIndex].restaurants.length > 0) {
@@ -577,9 +579,11 @@ export class FCMActionLayer {
     switch (spec.type) {
       case ACTIONS.PLACE_RESTAURANT: {
         const m = this.modules.model
-        m.addRestaurant(playerIndex, spec.index, this.store.context.rotation ?? 0, true)
+        const rotation = spec.rotation ?? this.store.context.rotation ?? 0
+        this.store.context.rotation = rotation
+        m.addRestaurant(playerIndex, spec.index, rotation, true)
         applied.index = spec.index
-        applied.rotation = this.store.context.rotation ?? 0
+        applied.rotation = rotation
         break
       }
 

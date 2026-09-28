@@ -417,15 +417,24 @@ export class FCMAdapter {
 
     switch (phase) {
       case 0: // Setup - Restaurants, round 1
-      case 1: // Setup - Restaurants, round 2
+      case 1: { // Setup - Restaurants, round 2
+        const rotation = store.context.rotation ?? 0
+        const placements = [0, 1, 2, 3].map((candidateRotation) => ({
+          rotation: candidateRotation,
+          legalSquares: rules.givePossibleStartingRestaurantsPosition(candidateRotation),
+        }))
         out.actions.push({
           type: 'place_restaurant',
-          rotation: store.context.rotation ?? 0,
-          legalSquares: rules.givePossibleStartingRestaurantsPosition(store.context.rotation ?? 0),
-          hint: '选择餐厅位置（可选点位见 legalSquares）',
+          // Keep the original fields for existing clients while exposing every human-selectable
+          // orientation as one atomic Agent action.
+          rotation,
+          legalSquares: placements.find((item) => item.rotation === rotation).legalSquares,
+          placements,
+          hint: '选择餐厅旋转方向和位置（所有合法组合见 placements）',
         })
         out.actions.push({ type: 'end_turn', hint: '结束放置' })
         break
+      }
 
       case 2: // Setup - Reserve Cards
         out.actions.push({
