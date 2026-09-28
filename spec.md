@@ -294,6 +294,12 @@ using the official restaurant-range calculation. It exposes each public seat's c
 before anyone chooses a new campaign, so an Agent can avoid creating demand that only a closer
 opponent can profitably serve; it does not predict future hidden actions.
 
+Strategy search remains outside the production Agent control plane during its initial spike. The
+MCP/API continues to expose authenticated seat-scoped observations and legal human actions only.
+Any future read-only simulation tool requires a separate review: it may return public consequence
+metrics, never raw engine snapshots, reserve cards, opponent move buffers or other hidden state;
+mutating unavailable opponent state must not change the acting Agent's recommendation.
+
 The public-human replay ladder in `/home/vincent/fcm-ai` has reached 100 base-standard games.
 Across 14,078 seat decision boundaries, 10,001 labels execute exactly through this adapter and the
 official controller. Lossy production/payday histories and 536 known legacy-version mismatches are
